@@ -41,7 +41,7 @@ function createMockPage(targetId: string = 'target-1', url: string = 'about:blan
     close: jest.fn().mockResolvedValue(undefined),
     createCDPSession: jest.fn().mockResolvedValue(mockCdpSession),
     target: jest.fn().mockReturnValue({ _targetId: targetId }),
-    viewport: jest.fn().mockReturnValue({ width: 1920, height: 1080 }),
+    viewport: jest.fn().mockReturnValue(null),
     setViewport: jest.fn().mockResolvedValue(undefined),
     url: jest.fn().mockReturnValue(url),
   };
@@ -99,6 +99,8 @@ describe('CDPConnectionPool', () => {
       await warmPool.initialize();
 
       expect(mockCdpClient.createPage).toHaveBeenCalledTimes(2);
+      expect(mockPage1.setViewport).not.toHaveBeenCalled();
+      expect(mockPage2.setViewport).not.toHaveBeenCalled();
     });
 
     test('should not re-initialize if already initialized', async () => {
@@ -117,6 +119,7 @@ describe('CDPConnectionPool', () => {
       const page = await pool.acquirePage();
 
       expect(page).toBe(mockPage);
+      expect(mockPage.setViewport).not.toHaveBeenCalled();
       expect(mockCdpClient.createPage).toHaveBeenCalled();
     });
 

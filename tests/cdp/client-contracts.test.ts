@@ -150,7 +150,7 @@ describe('CDPClient target/page contracts (#687 Wave 4 prereq)', () => {
 
     await expect(client.createPage('https://example.test/fail', null, true)).rejects.toThrow('navigation failed');
 
-    expect(page.setViewport).toHaveBeenCalled();
+    expect(page.setViewport).not.toHaveBeenCalled();
     expect(page.evaluateOnNewDocument).toHaveBeenCalled();
     expect(page.close).toHaveBeenCalled();
     expect(await client.getPageByTargetId('new-target')).toBeNull();
@@ -167,7 +167,7 @@ describe('CDPClient target/page contracts (#687 Wave 4 prereq)', () => {
     expect(page).toBe(startupPage);
     expect(browser.newPage).not.toHaveBeenCalled();
     expect(startupTarget.page).toHaveBeenCalledTimes(1);
-    expect(startupPage.setViewport).toHaveBeenCalled();
+    expect(startupPage.setViewport).not.toHaveBeenCalled();
     expect(smartGoto).toHaveBeenCalledWith(startupPage, 'https://example.test/', expect.any(Object));
     expect(await client.getPageByTargetId('startup-target')).toBe(startupPage);
   });

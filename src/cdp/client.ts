@@ -11,7 +11,6 @@ import { getTargetId } from './target-id';
 import { getRefIdManager } from '../core/perception/ref-id-manager';
 import { safeAsyncListener } from '../utils/safe-listener';
 import {
-  DEFAULT_VIEWPORT,
   DEFAULT_NAVIGATION_TIMEOUT_MS,
   DEFAULT_PROTOCOL_TIMEOUT_MS,
   DEFAULT_COOKIE_SCAN_TIMEOUT_MS,
@@ -19,7 +18,6 @@ import {
   DEFAULT_COOKIE_SCAN_MAX_CANDIDATES,
   DEFAULT_COOKIE_COPY_TIMEOUT_MS,
   DEFAULT_NEW_PAGE_TIMEOUT_MS,
-  DEFAULT_PAGE_CONFIG_TIMEOUT_MS,
   DEFAULT_PUPPETEER_CONNECT_TIMEOUT_MS,
   DEFAULT_HEARTBEAT_PING_TIMEOUT_MS,
   DEFAULT_CONNECT_VERIFY_STALENESS_MS,
@@ -1326,8 +1324,6 @@ export class CDPClient {
     return this.browser;
   }
 
-  // Default viewport for consistent debugging experience
-  static readonly DEFAULT_VIEWPORT = DEFAULT_VIEWPORT;
 
 
   /**
@@ -1750,7 +1746,7 @@ export class CDPClient {
   }
 
   /**
-   * Create a new page with default viewport
+   * Create a new page preserving the native window viewport
    * @param url Optional URL to navigate to
    * @param context Optional browser context for session isolation (null/undefined = use Chrome's default context with cookies)
    * @param skipCookieBridge If true, skip cookie bridging from authenticated pages (used for pool pre-warming)
@@ -1834,16 +1830,8 @@ export class CDPClient {
     this.configurePageDefenses(page);
     await applyRegisteredPreloads(page);
 
-    // Set default viewport for consistent debugging experience (non-critical; swallow timeout)
-    let pageConfigTid: ReturnType<typeof setTimeout> | undefined;
-    await Promise.race([
-      page.setViewport(CDPClient.DEFAULT_VIEWPORT),
-      new Promise<void>((resolve) => {
-        pageConfigTid = setTimeout(resolve, DEFAULT_PAGE_CONFIG_TIMEOUT_MS);
-      }),
-    ]).finally(() => {
-      if (pageConfigTid) clearTimeout(pageConfigTid);
-    });
+    // Keep the native viewport so headed pages follow window resizing.
+    // Explicit device emulation remains available through emulate_device.
 
     if (url) {
       try {
