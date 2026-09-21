@@ -39,6 +39,8 @@ export interface WorkerCreateOptions {
   targetUrl?: string;           // URL for origin-aware Chrome instance selection
   profileDirectory?: string;    // Chrome profile directory for multi-profile support
   port?: number;                // Explicit Chrome port for external instances (e.g., headed fallback)
+  /** Use a disposable incognito BrowserContext in the existing Chrome process. */
+  incognito?: boolean;
 }
 
 export interface Session {

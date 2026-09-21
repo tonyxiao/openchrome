@@ -51,6 +51,10 @@ const definition: MCPToolDefinition = {
           'process but isolate cookies/storage/cache. Created on first use, reused ' +
           'later. Names match [A-Za-z0-9_-]{1,64}; "default" is reserved.',
       },
+      incognito: {
+        type: 'boolean',
+        description: 'Open in this agent session\'s disposable incognito BrowserContext. It uses the same Chrome process but does not share profile storage; all such tabs are discarded when the agent session ends.',
+      },
     },
     required: ['url'],
   },
@@ -66,13 +70,22 @@ const handler: ToolHandler = async (
   const profileDirectory = args.profileDirectory as string | undefined;
   const recallArg = args.recall as boolean | undefined;
   const isolatedContext = args.isolatedContext as string | undefined;
+  const incognito = args.incognito === true;
   if (args.workerId && profileDirectory) {
     return {
       content: [{ type: 'text', text: 'Error: workerId and profileDirectory cannot be used together. Use profileDirectory alone (a worker is auto-created per profile).' }],
       isError: true,
     };
   }
-  const workerId = (args.workerId as string | undefined) || (profileDirectory ? `profile:${profileDirectory}` : undefined);
+  if (incognito && (args.workerId || profileDirectory || isolatedContext)) {
+    return {
+      content: [{ type: 'text', text: 'Error: incognito cannot be combined with workerId, profileDirectory, or isolatedContext.' }],
+      isError: true,
+    };
+  }
+  const workerId = incognito
+    ? `incognito:${sessionId}`
+    : (args.workerId as string | undefined) || (profileDirectory ? `profile:${profileDirectory}` : undefined);
 
   // URL is required
   if (!url) {
@@ -130,6 +143,7 @@ const handler: ToolHandler = async (
       workerId,
       profileDirectory,
       isolatedContext,
+      incognito,
     );
     const { targetId, page, workerId: assignedWorkerId, contextName, isolated } = result;
 
