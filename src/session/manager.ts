@@ -23,6 +23,10 @@ import {
   assertValidContextName,
   getNamedContextRegistry,
 } from '../chrome/contexts';
+import {
+  isSingleBrowserProcessMode,
+  secondaryChromePolicyError,
+} from '../config/browser-process-policy';
 import { getGlobalConfig } from '../config/global';
 import { RequestQueueManager } from './request-queue';
 import { getRefIdManager } from '../core/perception/ref-id-manager';
@@ -1305,6 +1309,9 @@ export class SessionManager {
     isolatedContext?: string,
     incognito = false,
   ): Promise<{ targetId: string; page: Page; workerId: string; contextName: string; isolated: boolean }> {
+    if (profileDirectory && isSingleBrowserProcessMode()) {
+      throw new Error(secondaryChromePolicyError('profileDirectory').replace(/^Error: /, ''));
+    }
     await this.ensureConnected();
 
     // Validate isolatedContext name early — before any session/worker

@@ -160,10 +160,26 @@ describe('NavigateTool - Headed Chrome Fallback (#459)', () => {
   });
 
   afterEach(() => {
+    delete process.env.OPENCHROME_SINGLE_BROWSER_PROCESS;
     jest.clearAllMocks();
   });
 
   describe('Tier 3: automatic escalation from Tier 2', () => {
+    test('single-process mode never escalates a blocked stealth page to another Chrome', async () => {
+      process.env.OPENCHROME_SINGLE_BROWSER_PROCESS = 'true';
+      const handler = await getNavigateHandler();
+      mockDetectBlockingPage
+        .mockResolvedValueOnce({ type: 'access-denied', detail: 'fixture block' })
+        .mockResolvedValueOnce({ type: 'access-denied', detail: 'still blocked' });
+
+      const result = await handler(testSessionId, { url: 'https://fixture.example' }) as MCPResult;
+      const parsed = parseResultJSON<NavResult>(result);
+
+      expect(parsed.fallbackTier).toBe(2);
+      expect(parsed.blockingPage).toBeDefined();
+      expect(mockHeadedNavigatePersistent).not.toHaveBeenCalled();
+    });
+
     test('headless policy requires user input instead of opening a visible fallback', async () => {
       const handler = await getNavigateHandler(true);
       mockDetectBlockingPage.mockResolvedValue({ type: 'access-denied', detail: 'fixture block' });
@@ -340,6 +356,18 @@ describe('NavigateTool - Headed Chrome Fallback (#459)', () => {
   });
 
   describe('headed parameter (direct)', () => {
+    test('single-process mode keeps headed=true in the existing broker Chrome', async () => {
+      process.env.OPENCHROME_SINGLE_BROWSER_PROCESS = 'true';
+      const handler = await getNavigateHandler();
+
+      const result = await handler(testSessionId, { url: 'https://www.coupang.com', headed: true });
+      const parsed = parseResultJSON<NavResult>(result as MCPResult);
+
+      expect(parsed.url).toBe('https://www.coupang.com');
+      expect(mockSessionManager.createTarget).toHaveBeenCalled();
+      expect(mockHeadedNavigatePersistent).not.toHaveBeenCalled();
+    });
+
     test('headed=true navigates directly in headed Chrome without fake BlockingInfo (#560)', async () => {
       const handler = await getNavigateHandler();
 

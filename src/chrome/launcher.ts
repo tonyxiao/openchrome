@@ -29,6 +29,8 @@ import {
   LaunchMode as ResolvedLaunchMode,
 } from './launch-mode-resolver';
 import { detectRunningChromes, filterByProfile, pickPreferredChrome } from './process-detector';
+import { isSingleBrowserProcessMode } from '../config/browser-process-policy';
+import { clearChromeSessionRestoreState } from './session-restore-policy';
 export type { ProfileType } from './profile-manager';
 
 /**
@@ -504,6 +506,16 @@ export class ChromeLauncher {
       ?? globalConfig.restoreLastSession
       ?? DEFAULT_RESTORE_LAST_SESSION;
 
+    if (isSingleBrowserProcessMode()) {
+      const removed = clearChromeSessionRestoreState(
+        userDataDir,
+        profileDirectory || 'Default',
+      );
+      if (removed.length > 0) {
+        console.error(`[ChromeLauncher] Cleared stale Chrome window restore state: ${removed.join(', ')}`);
+      }
+    }
+
     // Headless mode: explicit option > global config (default when auto-launch)
     const headless = options.headless ?? globalConfig.headless ?? false;
 
@@ -511,7 +523,7 @@ export class ChromeLauncher {
     args.push(
       '--no-first-run',
       '--no-default-browser-check',
-      restoreSession ? '--restore-last-session' : '--no-restore-last-session',
+      restoreSession && !isSingleBrowserProcessMode() ? '--restore-last-session' : '--no-restore-last-session',
     );
 
     if (headless) {

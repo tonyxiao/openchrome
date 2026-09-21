@@ -15,6 +15,7 @@ import { registerAllTools } from './tools';
 import { createTransport } from './transports/index';
 import { getGlobalConfig, setGlobalConfig } from './config/global';
 import { resolveHeadlessMode } from './config/headless-resolver';
+import { assertSingleBrowserProcessIsHeaded } from './config/browser-process-policy';
 import { resolveCapabilityFilterOptions } from './config/capability-filter';
 import { resolveWindowBoundsConfig } from './config/window-bounds';
 import { ToolTier } from './config/tool-tiers';
@@ -493,6 +494,7 @@ program
         { headless: getGlobalConfig().headless },
       );
       headless = mode === 'headless';
+      assertSingleBrowserProcessIsHeaded(headless);
     } catch (err) {
       console.error(`[openchrome] ${(err as Error).message}`);
       process.exit(2);

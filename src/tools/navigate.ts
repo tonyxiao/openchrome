@@ -21,6 +21,10 @@ import { withTimeout } from '../core/deadline/with-timeout';
 import { simulatePresence } from '../stealth/human-behavior';
 import { getHeadedFallback } from '../chrome/headed-fallback';
 import { getGlobalConfig } from '../config/global';
+import {
+  isSingleBrowserProcessMode,
+  secondaryChromePolicyError,
+} from '../config/browser-process-policy';
 import { autoRecallForUrl } from '../core/skill-memory/auto-recall';
 import type { Page } from 'puppeteer-core';
 import { wrapMutatingHandler } from '../core/perception/snapshot-cache-helper';
@@ -134,8 +138,8 @@ function sameSiteAuthRedirectGuidance(requestedUrl: string, finalUrl: string, ti
       redirectedFrom: requestedUrl,
       authRedirectUrl: finalUrl,
       authRedirectHost: final.hostname,
-      recommendedNextAction: 'Open the same URL with headed: true and the same profileDirectory, let the user complete login, then retry headless with that persistent profile.',
-      message: 'ACTION_REQUIRED: Same-site login redirect detected. The requested page resolved to a login/authentication page. Use headed mode with the same persistent profile for the user login step; do not keep retrying unauthenticated headless navigation.',
+      recommendedNextAction: 'Pause automation and hand the existing visible persistent-profile browser window to the user, then continue in the same tab.',
+      message: 'ACTION_REQUIRED: Same-site login redirect detected. The requested page resolved to a login/authentication page. Hand the existing browser window to the user; do not launch another browser or keep retrying.',
     };
   } catch {
     return null;
@@ -235,7 +239,7 @@ async function stealthAutoRetry(
     }
     console.error(`[navigate] CAPTCHA solve failed: ${solveResult.error}, escalating to Tier 3`);
   }
-  if (autoFallbackToHeaded && (stealthBlocked || stealthBroken)) {
+  if (!isSingleBrowserProcessMode() && autoFallbackToHeaded && (stealthBlocked || stealthBroken)) {
     const headedResult = await headedAutoRetry(targetUrl, blocking || blockingInfo, sessionId, profileDirectory);
     if (headedResult) return headedResult;
   }
@@ -493,11 +497,11 @@ const definition: MCPToolDefinition = {
       },
       headed: {
         type: 'boolean',
-        description: 'Force navigation in headed (non-headless) Chrome. Bypasses CDN/TLS-level blocking by using a real Chrome user-agent and TLS fingerprint. Requires a display. Default: false.',
+        description: 'Compatibility hint. In single-browser-process mode the broker is already visible/headed, so this never launches another Chrome.',
       },
       profileDirectory: {
         type: 'string',
-        description: 'Chrome profile directory name (e.g., "Profile 1"). Use list_profiles to see available profiles. Launches a separate Chrome instance for each profile. If omitted, uses the server default. Cannot be combined with workerId.',
+        description: 'Chrome profile directory name. Disabled when the broker enforces one visible persistent-profile Chrome process.',
       },
       recall: {
         type: 'boolean',
@@ -524,6 +528,13 @@ const handler: ToolHandler = async (
   const url = args.url as string;
   const profileDirectory = args.profileDirectory as string | undefined;
   const recallArg = args.recall as boolean | undefined;
+  const singleBrowserProcess = isSingleBrowserProcessMode();
+  if (profileDirectory && singleBrowserProcess) {
+    return {
+      content: [{ type: 'text', text: secondaryChromePolicyError('profileDirectory') }],
+      isError: true,
+    };
+  }
   // P1-6: reject workerId + profileDirectory combination
   if (args.workerId && profileDirectory) {
     return {
@@ -622,9 +633,11 @@ const handler: ToolHandler = async (
       // Domain blocklist check on normalized URL
       assertDomainAllowed(targetUrl);
 
-      // headed=true: skip headless entirely, navigate directly in headed Chrome.
-      // Uses headedNavigateDirect() which does NOT fabricate a BlockingInfo. (#560, #561, #562)
-      if (headed) {
+      // A single-process broker is already visible/headed. Treat the legacy
+      // hint as a no-op so it can never create a temporary-profile Chrome.
+      if (headed && singleBrowserProcess) {
+        console.error('[navigate] headed=true satisfied by the existing visible broker Chrome');
+      } else if (headed) {
         const headedResult = await headedNavigateDirect(targetUrl, sessionId, { profileDirectory });
         if (headedResult) return await withDomainSkillsResult(headedResult, recallArg);
         return {
@@ -690,7 +703,7 @@ const handler: ToolHandler = async (
             // Auto-fallback: if reused tab hit a CDN/WAF block, retry with stealth in a new tab (#459)
             if (reuseBlocking && autoFallback && RETRYABLE_BLOCK_TYPES.has(reuseBlocking.type)) {
               return await withDomainSkillsResult(
-                await stealthAutoRetry(sessionId, targetUrl, workerId, stealthSettleMs, profileDirectory, reuseBlocking, undefined, autoFallback, context),
+                await stealthAutoRetry(sessionId, targetUrl, workerId, stealthSettleMs, profileDirectory, reuseBlocking, undefined, autoFallback && !singleBrowserProcess, context),
                 recallArg,
               );
             }
@@ -757,14 +770,14 @@ const handler: ToolHandler = async (
       // Auto-fallback: if new tab hit a CDN/WAF block and stealth wasn't already used, retry with stealth (#459)
       if (newTabBlocking && !stealth && autoFallback && RETRYABLE_BLOCK_TYPES.has(newTabBlocking.type)) {
         return await withDomainSkillsResult(
-          await stealthAutoRetry(sessionId, targetUrl, workerId, stealthSettleMs, profileDirectory, newTabBlocking, targetId, autoFallback, context),
+          await stealthAutoRetry(sessionId, targetUrl, workerId, stealthSettleMs, profileDirectory, newTabBlocking, targetId, autoFallback && !singleBrowserProcess, context),
           recallArg,
         );
       }
 
       // When explicit stealth hits a block, escalate directly to tier 3 (headed Chrome)
       // since tier 2 (stealth) is already being used. (#453)
-      if (newTabBlocking && stealth && autoFallback && RETRYABLE_BLOCK_TYPES.has(newTabBlocking.type)) {
+      if (newTabBlocking && stealth && autoFallback && !singleBrowserProcess && RETRYABLE_BLOCK_TYPES.has(newTabBlocking.type)) {
         const headedResult = await headedAutoRetry(targetUrl, newTabBlocking, sessionId, profileDirectory);
         if (headedResult) return await withDomainSkillsResult(headedResult, recallArg);
       }

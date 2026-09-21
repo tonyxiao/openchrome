@@ -21,6 +21,7 @@ import { registerAllTools } from '../tools';
 import { createTransport } from '../transports/index';
 import { getGlobalConfig, setGlobalConfig } from '../config/global';
 import { resolveHeadlessMode } from '../config/headless-resolver';
+import { assertSingleBrowserProcessIsHeaded } from '../config/browser-process-policy';
 import { resolveWindowBoundsConfig } from '../config/window-bounds';
 import { ToolTier } from '../config/tool-tiers';
 import { bootstrapPilot, logActiveFlags, stopPilotBootstrap } from '../harness/flags';
@@ -216,6 +217,7 @@ class OpenChromeServerImpl implements OpenChromeServer {
         { headless: getGlobalConfig().headless },
       );
       headless = mode === 'headless';
+      assertSingleBrowserProcessIsHeaded(headless);
     } catch (err) {
       throw new Error(`[openchrome] ${(err as Error).message}`);
     }

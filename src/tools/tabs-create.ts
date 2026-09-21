@@ -21,6 +21,10 @@ import {
   InvalidContextNameError,
   assertValidContextName,
 } from '../chrome/contexts';
+import {
+  isSingleBrowserProcessMode,
+  secondaryChromePolicyError,
+} from '../config/browser-process-policy';
 
 const definition: MCPToolDefinition = {
   name: 'tabs_create',
@@ -38,7 +42,7 @@ const definition: MCPToolDefinition = {
       },
       profileDirectory: {
         type: 'string',
-        description: 'Chrome profile directory name (e.g., "Profile 1"). Use list_profiles to see available profiles. Launches a separate Chrome instance for each profile. If omitted, uses the server default. Cannot be combined with workerId.',
+        description: 'Chrome profile directory name. Disabled when the broker enforces one visible persistent-profile Chrome process.',
       },
       recall: {
         type: 'boolean',
@@ -71,6 +75,12 @@ const handler: ToolHandler = async (
   const recallArg = args.recall as boolean | undefined;
   const isolatedContext = args.isolatedContext as string | undefined;
   const incognito = args.incognito === true;
+  if (profileDirectory && isSingleBrowserProcessMode()) {
+    return {
+      content: [{ type: 'text', text: secondaryChromePolicyError('profileDirectory') }],
+      isError: true,
+    };
+  }
   if (args.workerId && profileDirectory) {
     return {
       content: [{ type: 'text', text: 'Error: workerId and profileDirectory cannot be used together. Use profileDirectory alone (a worker is auto-created per profile).' }],
