@@ -21,6 +21,7 @@ import { getRefIdManager } from '../core/perception/ref-id-manager';
 import { smartGoto } from '../core/page/smart-goto';
 import { DEFAULT_NAVIGATION_TIMEOUT_MS, DEFAULT_MAX_TARGETS_PER_WORKER, DEFAULT_MEMORY_PRESSURE_THRESHOLD, DEFAULT_CREATE_TARGET_TIMEOUT_MS, DEFAULT_COOKIE_CONTEXT_TIMEOUT_MS, DEFAULT_WATCHDOG_INTERVAL_MS } from '../config/defaults';
 import * as os from 'os';
+import { execFileSync } from 'child_process';
 import { BrowserRouter } from '../router';
 import { BrowserBackend, HybridConfig, RouteReason } from '../types/browser-backend';
 import { StorageStateManager } from '../storage-state';
@@ -46,6 +47,33 @@ import {
 /** The primary session ID used by most single-agent workflows. */
 const DEFAULT_SESSION_ID = 'default';
 const DEFAULT_CONTEXT_NAME = 'default';
+
+/**
+ * `os.freemem()` is not a useful pressure signal on macOS because it excludes
+ * reclaimable cached/compressed memory. That made healthy Macs look critically
+ * low on memory and triggered the five-minute emergency session cleanup.
+ */
+function availableMemoryBytes(): number {
+  if (process.platform === 'darwin') {
+    try {
+      const output = execFileSync('/usr/bin/memory_pressure', ['-Q'], {
+        encoding: 'utf8',
+        timeout: 2_000,
+        stdio: ['ignore', 'pipe', 'ignore'],
+      });
+      const match = output.match(/System-wide memory free percentage:\s*(\d+(?:\.\d+)?)%/i);
+      if (match) {
+        const percentage = Number(match[1]);
+        if (Number.isFinite(percentage) && percentage >= 0 && percentage <= 100) {
+          return Math.round(os.totalmem() * percentage / 100);
+        }
+      }
+    } catch {
+      // Fall back to Node's portable metric if the macOS utility is unavailable.
+    }
+  }
+  return os.freemem();
+}
 
 export interface SessionManagerConfig {
   /** Session TTL in milliseconds (default: 24 hours) */
@@ -428,11 +456,15 @@ export class SessionManager {
         this.lastCleanupTime = Date.now();
 
         // Memory pressure monitoring: aggressive cleanup when free RAM is low
-        const freeMemory = os.freemem();
+        const freeMemory = availableMemoryBytes();
         if (freeMemory < this.config.memoryPressureThreshold) {
-          console.error(`[SessionManager] Memory pressure detected: ${Math.round(freeMemory / 1024 / 1024)}MB free (threshold: ${Math.round(this.config.memoryPressureThreshold / 1024 / 1024)}MB)`);
+          console.error(`[SessionManager] Memory pressure detected: ${Math.round(freeMemory / 1024 / 1024)}MB available (threshold: ${Math.round(this.config.memoryPressureThreshold / 1024 / 1024)}MB)`);
           const aggressiveTTL = 5 * 60 * 1000; // 5-minute TTL instead of normal 24-hour
-          const aggressiveDeleted = await this.cleanupInactiveSessions(aggressiveTTL, { force: true });
+          const aggressiveDeleted = await this.cleanupInactiveSessions(aggressiveTTL, {
+            force: true,
+            trigger: 'memory_pressure',
+            availableMemoryBytes: freeMemory,
+          });
           if (aggressiveDeleted.length > 0) {
             console.error(`[SessionManager] Memory pressure cleanup: removed ${aggressiveDeleted.length} session(s) (5-min TTL)`);
           }
@@ -775,7 +807,10 @@ export class SessionManager {
   /**
    * Clean up inactive sessions
    */
-  async cleanupInactiveSessions(maxAgeMs: number, options?: { force?: boolean }): Promise<string[]> {
+  async cleanupInactiveSessions(
+    maxAgeMs: number,
+    options?: { force?: boolean; trigger?: 'memory_pressure'; availableMemoryBytes?: number },
+  ): Promise<string[]> {
     const now = Date.now();
     const deletedSessions: string[] = [];
     // force=true means memory pressure — clean everything including "default".
@@ -790,6 +825,20 @@ export class SessionManager {
         continue;
       }
       if (now - session.lastActivityAt > maxAgeMs) {
+        const targetCount = [...session.workers.values()]
+          .reduce((count, worker) => count + worker.targets.size, 0);
+        console.error(`[SessionExpiration] ${JSON.stringify({
+          timestamp: new Date(now).toISOString(),
+          sessionId,
+          reason: options?.trigger === 'memory_pressure' ? 'memory_pressure_ttl' : 'idle_ttl',
+          idleMs: now - session.lastActivityAt,
+          ttlMs: maxAgeMs,
+          targetCount,
+          availableMemoryBytes: options?.availableMemoryBytes ?? null,
+          memoryPressureThresholdBytes: options?.trigger === 'memory_pressure'
+            ? this.config.memoryPressureThreshold
+            : null,
+        })}`);
         // TTL-driven cleanup — #857 lifecycle bus distinguishes this from a
         // user-initiated `deleteSession()` call so consumers (recorder,
         // future journal) can attribute the destroy correctly.
@@ -801,6 +850,15 @@ export class SessionManager {
 
     const expiredLeases = this.targetLeases.expire(now, this.humanHeldTargets);
     for (const lease of expiredLeases) {
+      console.error(`[TargetLeaseExpiration] ${JSON.stringify({
+        timestamp: new Date(now).toISOString(),
+        targetId: lease.targetId,
+        sessionId: lease.sessionId,
+        workerId: lease.workerId ?? null,
+        lastActivityAt: lease.lastActivityAt,
+        leaseExpiresAt: lease.leaseExpiresAt ?? null,
+        cleanupPolicy: lease.cleanupPolicy,
+      })}`);
       this.targetQueueManager.cancelTarget(lease.targetId);
       // #1359 backlog item 7: reclaim the orphaned tab of an idle/crashed owner.
       // The lease is a sliding idle TTL refreshed on every executeCDP call, so it
