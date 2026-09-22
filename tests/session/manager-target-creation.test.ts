@@ -11,6 +11,7 @@ const mockCdpClientInstance = {
   closeBrowserContext: jest.fn().mockResolvedValue(undefined),
   getBrowser: jest.fn().mockReturnValue({ targets: jest.fn().mockReturnValue([]) }),
   getPageByTargetId: jest.fn().mockResolvedValue(null),
+  rebuildTargetIdIndex: jest.fn().mockResolvedValue(1),
   closePage: jest.fn().mockResolvedValue(undefined),
   send: jest.fn(),
   createPage: jest.fn(),
@@ -72,6 +73,32 @@ describe('SessionManager target creation ledger', () => {
       const manager = createManager();
       await manager.ensureConnected();
       expect(manager.isInternalTarget('startup-keeper')).toBe(true);
+    } finally {
+      if (previous === undefined) delete process.env.OPENCHROME_WINDOW_PER_SESSION;
+      else process.env.OPENCHROME_WINDOW_PER_SESSION = previous;
+      mockCdpClientInstance.getBrowser.mockReturnValue({ targets: jest.fn(() => []) });
+    }
+  });
+
+  test('reclaims the fresh startup new-tab as keeper after Chrome relaunch', async () => {
+    const previous = process.env.OPENCHROME_WINDOW_PER_SESSION;
+    process.env.OPENCHROME_WINDOW_PER_SESSION = 'true';
+    const startup = {
+      _targetId: 'relaunch-keeper',
+      type: () => 'page',
+      url: () => 'chrome://new-tab-page/',
+    };
+    mockCdpClientInstance.getBrowser.mockReturnValue({ targets: jest.fn(() => [startup]) } as never);
+    try {
+      const manager = createManager();
+      await manager.createSession({ id: 'stale-logical-session' });
+      (manager as any).internalTargets.add('dead-keeper-from-previous-process');
+
+      await manager.reconcileAfterReconnect();
+
+      expect(manager.isInternalTarget('dead-keeper-from-previous-process')).toBe(false);
+      expect(manager.isInternalTarget('relaunch-keeper')).toBe(true);
+      await expect(manager.listAbandonedWindows()).resolves.toEqual([]);
     } finally {
       if (previous === undefined) delete process.env.OPENCHROME_WINDOW_PER_SESSION;
       else process.env.OPENCHROME_WINDOW_PER_SESSION = previous;

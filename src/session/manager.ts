@@ -1080,9 +1080,9 @@ export class SessionManager {
   }
 
   /** Ensure Chrome survives cleanup of its final agent/abandoned window. */
-  private ensureInternalWindowKeeper(): Promise<void> {
+  private ensureInternalWindowKeeper(reuseReconnectStartupTarget = false): Promise<void> {
     if (this.keeperCreation) return this.keeperCreation;
-    const creation = this.ensureInternalWindowKeeperImpl();
+    const creation = this.ensureInternalWindowKeeperImpl(reuseReconnectStartupTarget);
     const tracked = creation.finally(() => {
       if (this.keeperCreation === tracked) this.keeperCreation = null;
     });
@@ -1090,7 +1090,7 @@ export class SessionManager {
     return this.keeperCreation;
   }
 
-  private async ensureInternalWindowKeeperImpl(): Promise<void> {
+  private async ensureInternalWindowKeeperImpl(reuseReconnectStartupTarget = false): Promise<void> {
     const browser = this.cdpClient.getBrowser();
     const pageTargets = browser.targets().filter(target => target.type() === 'page');
     const existing = this.windowKeepers.get(browser)
@@ -1105,14 +1105,21 @@ export class SessionManager {
     // window. Reuse it as the internal keeper instead of creating a second
     // invisible blank window and renderer. This is safe only before any
     // session exists; later blank windows are real abandoned user work.
-    if (this.sessions.size === 0 && this.internalTargets.size === 0 && pageTargets.length === 1) {
+    if (
+      (reuseReconnectStartupTarget || this.sessions.size === 0) &&
+      this.internalTargets.size === 0 &&
+      pageTargets.length === 1
+    ) {
       const startupTarget = pageTargets[0];
       const startupUrl = startupTarget.url();
+      const startupTargetId = getTargetId(startupTarget);
       if (
-        startupUrl === '' || startupUrl === 'about:blank' || startupUrl === 'chrome://newtab/' ||
-        startupUrl.startsWith('chrome://new-tab-page')
+        !this.targetToWorker.has(startupTargetId) &&
+        (
+          startupUrl === '' || startupUrl === 'about:blank' || startupUrl === 'chrome://newtab/' ||
+          startupUrl.startsWith('chrome://new-tab-page')
+        )
       ) {
-        const startupTargetId = getTargetId(startupTarget);
         this.windowKeepers.set(browser, startupTargetId);
         this.internalTargets.add(startupTargetId);
         return;
@@ -2343,6 +2350,12 @@ export class SessionManager {
 
     const aliveTargets = browser.targets().filter(t => t.type() === 'page');
     const aliveTargetIds = new Set(aliveTargets.map(t => getTargetId(t)));
+    // Internal targets belong to the previous browser process and are not in
+    // targetToWorker, so the normal dead-target loop below cannot remove them.
+    // Drop stale keeper IDs before selecting the new process's startup target.
+    this.internalTargets = new Set(
+      Array.from(this.internalTargets).filter(targetId => aliveTargetIds.has(targetId)),
+    );
     this.targetLeases.reconcileAliveTargetIds(aliveTargetIds);
     // #1359 backlog item 4: drop per-target queues whose targetId no longer
     // exists post-reconnect so closed/expired targets stop holding queue
@@ -2443,6 +2456,13 @@ export class SessionManager {
         touchedSessions.add(ownerInfo.sessionId);
       }
     }
+
+    // Chrome creates one New Tab when a fresh headed process starts. Claim it
+    // as infrastructure before abandoned-window discovery runs, even when
+    // stale logical sessions remain after the crash. Otherwise the startup
+    // window becomes an abandoned session whose TTL can close the final window
+    // and cause a periodic exit/relaunch loop.
+    if (this.windowPerSession) await this.ensureInternalWindowKeeper(true);
 
     const surviving = trackedTargetIds.length - removed;
     console.error(`[SessionManager] Post-reconnect reconciliation: ${removed} removed, ${remapped} re-mapped, ${surviving} surviving, ${indexed} indexed`);

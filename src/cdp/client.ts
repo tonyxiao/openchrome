@@ -658,10 +658,16 @@ export class CDPClient {
 
     const generation = ++this.connectionGeneration;
 
-    // Attempt reconnection — do NOT auto-launch Chrome.
-    // If Chrome was closed by the user, we should stay disconnected and only
-    // re-launch when the next tool call arrives (lazy launch). This prevents
-    // the "Chrome keeps reopening" loop reported in issue #159.
+    // A managed browser that has already served real browser demand must be
+    // relaunched as part of reconnect. In daemon mode maxReconnectAttempts is
+    // infinite, so attach-only retries would otherwise leave the broker stuck
+    // in `reconnecting` forever after Chrome exits. The launcher's in-flight
+    // guard coalesces this with watchdog or tool-call recovery and preserves
+    // the one-managed-Chrome invariant.
+    //
+    // Do not launch for an attach-only client or before the first real browser
+    // demand: startup readiness probes must retain lazy-start semantics.
+    const autoLaunchOnReconnect = this.autoLaunch && this.browserDemandStarted;
     while (!this.disconnectRequested && (this.maxReconnectAttempts === Infinity || this.reconnectAttempts < this.maxReconnectAttempts)) {
       this.reconnectAttempts++;
       this.reconnectingAttempt = this.reconnectAttempts;
@@ -680,7 +686,7 @@ export class CDPClient {
       });
 
       try {
-        const connected = await this.connectInternal({ autoLaunch: false, generation });
+        const connected = await this.connectInternal({ autoLaunch: autoLaunchOnReconnect, generation });
         if (connected === false) {
           this.reconnecting = false;
           this.reconnectingAttempt = 0;

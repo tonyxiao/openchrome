@@ -46,11 +46,13 @@ function createConnectedClient(opts: {
   maxReconnectAttempts?: number;
   reconnectDelayMs?: number;
   removeAllListeners?: jest.Mock;
+  autoLaunch?: boolean;
 } = {}): CDPClient {
   const client = new CDPClient({
     port: 9222,
     maxReconnectAttempts: opts.maxReconnectAttempts ?? 3,
     reconnectDelayMs: opts.reconnectDelayMs ?? 1, // 1ms — falsy 0 would hit the 1000ms default
+    autoLaunch: opts.autoLaunch,
   });
 
   const mockBrowserTarget = {
@@ -170,6 +172,41 @@ describe('CDPClient – handleDisconnect reconnection fixes', () => {
 
     // Should return immediately without attempting reconnection
     expect(connectSpy).not.toHaveBeenCalled();
+  });
+
+  test('relaunches a managed Chrome after real browser demand', async () => {
+    const client = createConnectedClient({
+      autoLaunch: true,
+      maxReconnectAttempts: 1,
+      reconnectDelayMs: 1,
+    });
+    client.markManagedBrowserDemand();
+
+    const connectSpy = jest.spyOn(client as any, 'connectInternal')
+      .mockImplementation(async () => {
+        (client as any).browser = { on: jest.fn(), isConnected: jest.fn().mockReturnValue(true) };
+        (client as any).connectionState = 'connected';
+      });
+
+    await (client as any).handleDisconnect();
+
+    expect(connectSpy).toHaveBeenCalledWith(expect.objectContaining({ autoLaunch: true }));
+    expect(client.getConnectionState()).toBe('connected');
+  });
+
+  test('keeps pre-demand and attach-only reconnects launch-free', async () => {
+    const preDemand = createConnectedClient({ autoLaunch: true, maxReconnectAttempts: 1 });
+    const preDemandConnect = jest.spyOn(preDemand as any, 'connectInternal')
+      .mockRejectedValue(new Error('Chrome not available'));
+    await (preDemand as any).handleDisconnect();
+    expect(preDemandConnect).toHaveBeenCalledWith(expect.objectContaining({ autoLaunch: false }));
+
+    const attachOnly = createConnectedClient({ autoLaunch: false, maxReconnectAttempts: 1 });
+    attachOnly.markManagedBrowserDemand();
+    const attachOnlyConnect = jest.spyOn(attachOnly as any, 'connectInternal')
+      .mockRejectedValue(new Error('Chrome not available'));
+    await (attachOnly as any).handleDisconnect();
+    expect(attachOnlyConnect).toHaveBeenCalledWith(expect.objectContaining({ autoLaunch: false }));
   });
 
   test('uses exponential backoff between reconnection attempts', async () => {
