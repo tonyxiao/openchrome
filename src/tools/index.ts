@@ -16,6 +16,7 @@ import { registerFindTool } from './find';
 import { registerFormInputTool } from './form-input';
 import { registerJavascriptTool } from './javascript';
 import { registerTabsContextTool } from './tabs-context';
+import { registerAbandonedWindowTools } from './windows-abandoned';
 import { registerBrowserControlTool } from './browser-control';
 import { registerTabsCreateTool } from './tabs-create';
 import { registerTabsCloseTool } from './tabs-close';
@@ -269,6 +270,8 @@ export const TOOL_CAPABILITY_MAP: Record<string, ToolCapability> = {
   tabs_activate: 'core',
   tabs_close: 'core',
   tabs_context: 'core',
+  windows_abandoned: 'core',
+  window_claim: 'core',
   tabs_create: 'core',
   user_agent: 'core',
   validate_page: 'core',
@@ -441,6 +444,7 @@ export function registerAllTools(
 
   // Tab management
   registerTabsContextTool(proxy);
+  registerAbandonedWindowTools(proxy);
   registerBrowserControlTool(proxy);
   registerTabsCreateTool(proxy);
   registerTabsCloseTool(proxy);

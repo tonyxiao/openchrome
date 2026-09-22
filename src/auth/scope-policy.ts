@@ -33,6 +33,7 @@ export const READ_TOOLS: ReadonlySet<ToolId> = new Set<ToolId>([
 
   // Tab / session / profile introspection
   'tabs_context',
+  'windows_abandoned',
   'oc_profile_status',
   'oc_get_connection_info',
   'oc_connection_health',
@@ -83,6 +84,7 @@ export const WRITE_TOOLS: ReadonlySet<ToolId> = new Set<ToolId>([
   'tabs_activate',
   'tabs_create',
   'tabs_close',
+  'window_claim',
 
   // Script / cookie / storage mutation
   'javascript_tool',

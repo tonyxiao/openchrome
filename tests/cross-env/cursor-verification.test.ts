@@ -158,7 +158,7 @@ suiteRunner('Cross-Env: Cursor IDE Verification (Issue #509)', () => {
 
       const nonExpandTools = tier1Tools.filter((t: any) => t.name !== 'expand_tools');
       expect(nonExpandTools.length).toBeGreaterThanOrEqual(14);
-      expect(nonExpandTools.length).toBeLessThanOrEqual(15);
+      expect(nonExpandTools.length).toBeLessThanOrEqual(17);
       expect(new Set(toolNames).size).toBe(toolNames.length);
     });
 

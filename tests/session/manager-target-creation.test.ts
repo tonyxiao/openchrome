@@ -59,6 +59,26 @@ function createManager(maxTargetsPerWorker = 5): SessionManager {
 }
 
 describe('SessionManager target creation ledger', () => {
+  test('reuses the single startup new-tab as the internal keeper', async () => {
+    const previous = process.env.OPENCHROME_WINDOW_PER_SESSION;
+    process.env.OPENCHROME_WINDOW_PER_SESSION = 'true';
+    const startup = {
+      _targetId: 'startup-keeper',
+      type: () => 'page',
+      url: () => 'chrome://new-tab-page/',
+    };
+    mockCdpClientInstance.getBrowser.mockReturnValue({ targets: jest.fn(() => [startup]) } as never);
+    try {
+      const manager = createManager();
+      await manager.ensureConnected();
+      expect(manager.isInternalTarget('startup-keeper')).toBe(true);
+    } finally {
+      if (previous === undefined) delete process.env.OPENCHROME_WINDOW_PER_SESSION;
+      else process.env.OPENCHROME_WINDOW_PER_SESSION = previous;
+      mockCdpClientInstance.getBrowser.mockReturnValue({ targets: jest.fn(() => []) });
+    }
+  });
+
   test('reserves an in-flight creation slot and releases it after creation failure', async () => {
     const manager = createManager(1);
     await manager.createSession({ id: 'capacity' });

@@ -2,7 +2,7 @@
 
 > Generated from `src/tools/index.ts`. Do not edit by hand; run `npm run docs:capability-map`.
 
-Total tools: 117
+Total tools: 119
 
 ## core
 
@@ -98,6 +98,8 @@ Total tools: 117
 - `validate_page` — Composite health check: navigate, wait, capture console errors, return structured summary (title, errors, interactive count, body sample).
 - `vision_find` — Find elements using vision-based screenshot analysis.
 - `wait_for` — Wait for a condition.
+- `window_claim` — Atomically claim an abandoned agent-browser window and all of its tabs for the current agent session.
+- `windows_abandoned` — List abandoned agent-browser windows available for this agent to claim.
 - `worker` — Manage logical tab groups in this agent session.
 
 ## crawl

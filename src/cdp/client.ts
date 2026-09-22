@@ -946,9 +946,7 @@ export class CDPClient {
 
       const url = target.url();
       const provisional = url === '' || url === 'about:blank';
-      if (isInternalBrowserUrl(url) && !provisional) return;
-
-      if (!provisional) {
+      if (!provisional && !isInternalBrowserUrl(url)) {
         try {
           assertDomainAllowed(url);
         } catch (err) {
@@ -968,14 +966,45 @@ export class CDPClient {
       }
 
       const opener = target.opener();
-      if (!opener) return; // Not a popup - skip to avoid ghost tabs
+      if (!opener) {
+        // A genuine top-level page (for example Cmd-N, the default-browser
+        // shim, or a window surviving broker reconnect) still needs an
+        // owner. Defer briefly so broker-created targets can first publish
+        // their intended session window; the manager then either inherits
+        // that window owner or creates an abandoned synthetic session.
+        setTimeout(() => {
+          import('../session-manager').then(({ getSessionManager }) => {
+            const manager = getSessionManager();
+            if (typeof manager.adoptBrowserCreatedTarget !== 'function') return;
+            if (!manager.isInternalTarget(targetId) && !manager.getTargetOwner(targetId)) {
+              manager.adoptBrowserCreatedTarget(targetId).catch((err) => {
+                console.error(`[CDPClient] Failed to adopt browser-created target ${targetId}: ${err instanceof Error ? err.message : String(err)}`);
+              });
+            }
+          }).catch(() => {});
+        }, 250);
+        return;
+      }
       const openerTargetId = getTargetId(opener);
       if (!openerTargetId) return;
 
       // Check if opener is managed by SessionManager (dynamic import to avoid circular dep)
       const { getSessionManager } = await import('../session-manager');
       const sessionManager = getSessionManager();
-      if (!sessionManager.getTargetOwner(openerTargetId)) return;
+      if (!sessionManager.getTargetOwner(openerTargetId)) {
+        // The opener itself may be a just-created user window whose deferred
+        // adoption has not run yet. Adopt parent then child in window order so
+        // neither target can remain outside the ownership model.
+        setTimeout(() => {
+          if (typeof sessionManager.adoptBrowserCreatedTarget !== 'function') return;
+          sessionManager.adoptBrowserCreatedTarget(openerTargetId)
+            .then(() => sessionManager.adoptBrowserCreatedTarget(targetId))
+            .catch((err) => {
+              console.error(`[CDPClient] Failed to adopt browser-created popup ${targetId}: ${err instanceof Error ? err.message : String(err)}`);
+            });
+        }, 250);
+        return;
+      }
 
       // Register in the same worker as opener and inherit its named context.
       // Managed blank targets remain provisional until targetchanged observes

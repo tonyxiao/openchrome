@@ -45,6 +45,7 @@ Categories below are documentation-only — the runtime source is
 | `read_page`                | Page text/title extraction                           |
 | `page_content`             | HTML content read                                    |
 | `tabs_context`             | Tab list snapshot                                    |
+| `windows_abandoned`        | Claimable abandoned-window snapshot                  |
 | `list_profiles`            | Chrome profile enumeration                           |
 | `performance_metrics`      | Page performance read                                |
 | `oc_vitals`                | Web Vitals performance read                          |
@@ -128,6 +129,7 @@ These tools combine network egress with destructive worst-case capability. They 
 | `emulate_device`        | Switches device emulation                                        |
 | `tabs_activate`         | Explicitly changes the active Chrome tab and verifies visibility |
 | `tabs_create`           | Opens a new tab (state mutation, not destructive)                |
+| `window_claim`          | Transfers an abandoned window to the caller session              |
 | `lightweight_scroll`    | Scroll (page state)                                              |
 | `oc_skill_record`       | Skill memory write                                               |
 | `oc_journal`            | Multi-action — read OR write                                     |

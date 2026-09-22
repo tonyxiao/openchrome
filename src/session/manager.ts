@@ -112,6 +112,14 @@ export interface PopupTargetRegistrationOptions {
   title?: string;
 }
 
+export interface AbandonedWindowInfo {
+  id: string;
+  windowId: number;
+  createdAt: number;
+  lastActivityAt: number;
+  tabs: Array<{ tabId: string; url: string; title: string }>;
+}
+
 const DEFAULT_CONFIG: Required<Omit<SessionManagerConfig, 'tenantManager' | 'strictTenantIsolation'>> = {
   sessionTTL: 30 * 60 * 1000,      // 30 minutes
   cleanupInterval: 60 * 1000,       // 1 minute
@@ -192,8 +200,14 @@ export class SessionManager {
    */
   private readonly windowPerSession = process.env.OPENCHROME_WINDOW_PER_SESSION === 'true';
   private sessionWindows = new Map<string, { windowId: number; anchorTargetId: string }>();
-  /** An unowned blank window keeps headed Chrome alive after the last agent exits. */
+  /** Internal infrastructure target which keeps headed Chrome alive with no user sessions. */
   private windowKeepers = new WeakMap<Browser, string>();
+  private internalTargets = new Set<string>();
+  private keeperCreation: Promise<void> | null = null;
+  /** Synthetic sessions holding abandoned top-level windows until an agent claims them. */
+  private abandonedSessions = new Set<string>();
+  private abandonedWindowSessions = new Map<number, string>();
+  private abandonedOwnershipTail: Promise<void> = Promise.resolve();
   /** Chrome decides the destination of Target.createTarget from focused window. */
   private windowCreationTail: Promise<void> = Promise.resolve();
 
@@ -507,6 +521,7 @@ export class SessionManager {
    * stage-time sliced as described in A-3 §3-2.
    */
   async ensureConnected(budget?: Budget): Promise<void> {
+    let connectedNow = false;
     if (!this.cdpClient.isConnected()) {
       if (budget && !isLegacyBudgetMode()) {
         const connectFraction = DEFAULT_SESSION_INIT_BUDGET_LAUNCH_FRACTION
@@ -516,6 +531,15 @@ export class SessionManager {
       } else {
         await this.cdpClient.connect();
       }
+      connectedNow = true;
+    }
+    if (this.windowPerSession) await this.ensureInternalWindowKeeper();
+    if (connectedNow) {
+      setTimeout(() => {
+        this.discoverAbandonedTargets().catch((err) => {
+          console.error(`[SessionManager] Initial abandoned-window discovery failed: ${err instanceof Error ? err.message : String(err)}`);
+        });
+      }, 250);
     }
   }
 
@@ -725,6 +749,10 @@ export class SessionManager {
     // Clean up ref IDs
     getRefIdManager().clearSessionRefs(sessionId);
     this.targetCreationLedger.clearSession(sessionId);
+    const abandonedWindow = Array.from(this.abandonedWindowSessions.entries())
+      .find(([, candidateSessionId]) => candidateSessionId === sessionId)?.[0];
+    if (abandonedWindow !== undefined) this.abandonedWindowSessions.delete(abandonedWindow);
+    this.abandonedSessions.delete(sessionId);
     for (const key of this.sessionWindows.keys()) {
       if (key === sessionId || key.startsWith(`${sessionId}:`)) this.sessionWindows.delete(key);
     }
@@ -1022,7 +1050,6 @@ export class SessionManager {
     }
 
     this.targetCreationLedger.clearWorker(session.id, workerId);
-    this.sessionWindows.delete(`${session.id}:${workerId}`);
     session.workers.delete(workerId);
     this.deletingWorkers.delete(deletionKey);
     console.error(`[SessionManager] Deleted worker ${workerId} from session ${session.id}`);
@@ -1052,6 +1079,58 @@ export class SessionManager {
     throw new Error(`Chrome created target ${targetId} but it did not become a page`);
   }
 
+  /** Ensure Chrome survives cleanup of its final agent/abandoned window. */
+  private ensureInternalWindowKeeper(): Promise<void> {
+    if (this.keeperCreation) return this.keeperCreation;
+    const creation = this.ensureInternalWindowKeeperImpl();
+    const tracked = creation.finally(() => {
+      if (this.keeperCreation === tracked) this.keeperCreation = null;
+    });
+    this.keeperCreation = tracked;
+    return this.keeperCreation;
+  }
+
+  private async ensureInternalWindowKeeperImpl(): Promise<void> {
+    const browser = this.cdpClient.getBrowser();
+    const pageTargets = browser.targets().filter(target => target.type() === 'page');
+    const existing = this.windowKeepers.get(browser)
+      ?? Array.from(this.internalTargets).find(targetId =>
+        pageTargets.some(target => getTargetId(target) === targetId));
+    if (existing) {
+      this.windowKeepers.set(browser, existing);
+      return;
+    }
+
+    // A freshly launched managed Chrome already supplies one blank/new-tab
+    // window. Reuse it as the internal keeper instead of creating a second
+    // invisible blank window and renderer. This is safe only before any
+    // session exists; later blank windows are real abandoned user work.
+    if (this.sessions.size === 0 && this.internalTargets.size === 0 && pageTargets.length === 1) {
+      const startupTarget = pageTargets[0];
+      const startupUrl = startupTarget.url();
+      if (
+        startupUrl === '' || startupUrl === 'about:blank' || startupUrl === 'chrome://newtab/' ||
+        startupUrl.startsWith('chrome://new-tab-page')
+      ) {
+        const startupTargetId = getTargetId(startupTarget);
+        this.windowKeepers.set(browser, startupTargetId);
+        this.internalTargets.add(startupTargetId);
+        return;
+      }
+    }
+
+    const rootSession = await browser.target().createCDPSession();
+    try {
+      const keeper = await rootSession.send('Target.createTarget', {
+        url: 'about:blank', newWindow: true, background: true,
+      }) as { targetId: string };
+      this.windowKeepers.set(browser, keeper.targetId);
+      this.internalTargets.add(keeper.targetId);
+    } finally {
+      await rootSession.detach().catch(() => {});
+    }
+  }
+
   /**
    * Create a target in the session's dedicated top-level window. This uses
    * CDP Target.createTarget because Puppeteer's Browser.newPage() always
@@ -1068,20 +1147,11 @@ export class SessionManager {
       const rootSession = await browser.target().createCDPSession();
       const previous = this.sessionWindows.get(windowKey);
       try {
-        // Chrome exits when its final window closes. Keep one deliberately
-        // unowned, blank maintenance window so destroying an agent session
-        // closes only that agent's window and never the durable browser or
-        // its profile-backed state.
-        const keeperTargetId = this.windowKeepers.get(browser);
-        const keeperIsAlive = keeperTargetId && browser.targets().some(
-          target => getTargetId(target) === keeperTargetId,
-        );
-        if (!keeperIsAlive) {
-          const keeper = await rootSession.send('Target.createTarget', {
-            url: 'about:blank', newWindow: true, background: true,
-          }) as { targetId: string };
-          this.windowKeepers.set(browser, keeper.targetId);
-        }
+        // Chrome exits when its final window closes. Keep one explicitly
+        // internal maintenance target so destroying an agent session never
+        // takes down the durable browser process. It is infrastructure, not
+        // a user-visible/manual ownership category.
+        await this.ensureInternalWindowKeeper();
         if (previous) {
           // Target activation is scoped by the lock: Chrome places the next
           // tab in the active window, so no other session can interleave here.
@@ -1178,7 +1248,7 @@ export class SessionManager {
       const useDedicatedWindow = this.windowPerSession;
 
       if (useDedicatedWindow) {
-        page = await this.createWindowOwnedPage(`${sessionId}:${worker.id}`, cdpClient, url, worker.context);
+        page = await this.createWindowOwnedPage(sessionId, cdpClient, url, worker.context);
       } else if (this.connectionPool && this.config.useConnectionPool) {
         let poolPage: Page | null = null;
         try {
@@ -1623,6 +1693,152 @@ export class SessionManager {
     return this.targetToWorker.get(targetId);
   }
 
+  /** Whether a page target exists solely to keep the managed Chrome process alive. */
+  isInternalTarget(targetId: string): boolean {
+    return this.internalTargets.has(targetId);
+  }
+
+  private withAbandonedOwnershipLock<T>(operation: () => Promise<T>): Promise<T> {
+    const run = this.abandonedOwnershipTail.then(operation, operation);
+    this.abandonedOwnershipTail = run.then(() => undefined, () => undefined);
+    return run;
+  }
+
+  private async getWindowIdForTarget(targetId: string): Promise<number | null> {
+    const browser = this.cdpClient.getBrowser();
+    const rootSession = await browser.target().createCDPSession();
+    try {
+      const result = await rootSession.send('Browser.getWindowForTarget', { targetId }) as { windowId: number };
+      return result.windowId;
+    } catch {
+      return null;
+    } finally {
+      await rootSession.detach().catch(() => {});
+    }
+  }
+
+  private ownerForWindow(windowId: number): { sessionId: string; workerId: string } | undefined {
+    for (const [sessionId, window] of this.sessionWindows) {
+      if (window.windowId !== windowId) continue;
+      const session = this.sessions.get(sessionId);
+      if (session) return { sessionId, workerId: session.defaultWorkerId };
+    }
+    return undefined;
+  }
+
+  /**
+   * Assign a Chrome-created page to its window owner. A page in an agent's
+   * existing window inherits that agent. A page in a new top-level window is
+   * immediately placed in a synthetic abandoned session, never left unowned.
+   */
+  async adoptBrowserCreatedTarget(targetId: string): Promise<boolean> {
+    return this.withAbandonedOwnershipLock(async () => {
+      if (this.internalTargets.has(targetId) || this.targetToWorker.has(targetId)) return true;
+
+      const page = await this.cdpClient.getPageByTargetId(targetId);
+      if (!page || page.isClosed()) return false;
+      const windowId = await this.getWindowIdForTarget(targetId);
+      if (windowId === null) return false;
+
+      let owner = this.ownerForWindow(windowId);
+      if (!owner) {
+        let abandonedSessionId = this.abandonedWindowSessions.get(windowId);
+        if (!abandonedSessionId || !this.sessions.has(abandonedSessionId)) {
+          abandonedSessionId = `abandoned-${crypto.randomUUID()}`;
+          await this.createSession({ id: abandonedSessionId, name: `Abandoned window ${windowId}` });
+          this.abandonedSessions.add(abandonedSessionId);
+          this.abandonedWindowSessions.set(windowId, abandonedSessionId);
+          this.sessionWindows.set(abandonedSessionId, { windowId, anchorTargetId: targetId });
+        }
+        owner = { sessionId: abandonedSessionId, workerId: 'default' };
+      }
+
+      const registered = await this.registerExternalTarget(targetId, owner.sessionId, owner.workerId);
+      if (registered) {
+        const trackedWindow = this.sessionWindows.get(owner.sessionId);
+        if (trackedWindow) trackedWindow.anchorTargetId = targetId;
+      }
+      return registered;
+    });
+  }
+
+  /** Discover any pages which predate the current broker connection. */
+  async discoverAbandonedTargets(): Promise<void> {
+    await this.ensureConnected();
+    const candidates = this.cdpClient.getBrowser().targets()
+      .filter(target => target.type() === 'page')
+      .map(target => getTargetId(target))
+      .filter(targetId => targetId && !this.targetToWorker.has(targetId) && !this.internalTargets.has(targetId));
+    for (const targetId of candidates) await this.adoptBrowserCreatedTarget(targetId);
+  }
+
+  async listAbandonedWindows(): Promise<AbandonedWindowInfo[]> {
+    await this.discoverAbandonedTargets();
+    const result: AbandonedWindowInfo[] = [];
+    for (const sessionId of this.abandonedSessions) {
+      const session = this.sessions.get(sessionId);
+      const worker = session?.workers.get(session?.defaultWorkerId ?? 'default');
+      const window = this.sessionWindows.get(sessionId);
+      if (!session || !worker || !window) continue;
+      const tabs: AbandonedWindowInfo['tabs'] = [];
+      for (const tabId of worker.targets) {
+        const page = await this.cdpClient.getPageByTargetId(tabId).catch(() => null);
+        if (!page || page.isClosed()) continue;
+        tabs.push({ tabId, url: page.url(), title: await safeTitle(page) });
+      }
+      if (tabs.length) result.push({
+        id: sessionId,
+        windowId: window.windowId,
+        createdAt: session.createdAt,
+        lastActivityAt: session.lastActivityAt,
+        tabs,
+      });
+    }
+    return result.sort((a, b) => a.createdAt - b.createdAt);
+  }
+
+  /** Atomically transfer an entire abandoned window to the caller session. */
+  async claimAbandonedWindow(sessionId: string, abandonedId: string): Promise<{ windowId: number; tabIds: string[] }> {
+    return this.withAbandonedOwnershipLock(async () => {
+      if (!this.abandonedSessions.has(abandonedId)) throw new Error('Abandoned window no longer exists or was already claimed');
+      const abandoned = this.sessions.get(abandonedId);
+      const sourceWorker = abandoned?.workers.get(abandoned?.defaultWorkerId ?? 'default');
+      const window = this.sessionWindows.get(abandonedId);
+      if (!abandoned || !sourceWorker || !window) throw new Error('Abandoned window is no longer available');
+
+      const destination = await this.getOrCreateSession(sessionId);
+      const destinationWorker = destination.workers.get(destination.defaultWorkerId)!;
+      const destinationTargetCount = Array.from(destination.workers.values())
+        .reduce((count, worker) => count + worker.targets.size, 0);
+      if (destinationTargetCount > 0 || this.sessionWindows.has(sessionId)) {
+        throw new Error('Current agent session already owns a window; close it before claiming another');
+      }
+
+      const tabIds = Array.from(sourceWorker.targets);
+      for (const targetId of tabIds) {
+        sourceWorker.targets.delete(targetId);
+        this.targetLeases.release(targetId, abandonedId);
+        destinationWorker.targets.add(targetId);
+        this.targetToWorker.set(targetId, { sessionId, workerId: destination.defaultWorkerId });
+        this.acquireTargetLease(targetId, sessionId, destination.defaultWorkerId);
+      }
+      destinationWorker.lastActivityAt = Date.now();
+      destination.lastActivityAt = Date.now();
+      this.sessionWindows.delete(abandonedId);
+      this.sessionWindows.set(sessionId, {
+        windowId: window.windowId,
+        anchorTargetId: tabIds.at(-1) ?? window.anchorTargetId,
+      });
+      this.abandonedSessions.delete(abandonedId);
+      this.abandonedWindowSessions.delete(window.windowId);
+      this.sessions.delete(abandonedId);
+      this.targetLeases.releaseSession(abandonedId);
+      this.emitEvent({ type: 'session:deleted', sessionId: abandonedId, timestamp: Date.now() });
+      this.emitLifecycle({ kind: 'session:destroy', sessionId: abandonedId, reason: 'close', ts: Date.now() });
+      return { windowId: window.windowId, tabIds };
+    });
+  }
+
   /**
    * Register a headed fallback page directly into the session manager.
    * Injects the page into the main CDPClient's targetIdIndex so all tools
@@ -1757,7 +1973,10 @@ export class SessionManager {
 
     // Registration never discards an existing tab to make room. Callers own
     // cleanup of a newly-created target when registration returns false.
-    if (worker.targets.size + (this.targetReservations.get(worker) ?? 0) >= this.config.maxTargetsPerWorker) return false;
+    if (
+      !this.abandonedSessions.has(sessionId) &&
+      worker.targets.size + (this.targetReservations.get(worker) ?? 0) >= this.config.maxTargetsPerWorker
+    ) return false;
 
     if (
       this.deletingSessions.has(sessionId) ||
@@ -1807,7 +2026,7 @@ export class SessionManager {
       // Close the page via CDP (use worker's CDPClient if on pool)
       const cdpClient = this.getCDPClientForWorker(sessionId, ownerInfo.workerId);
 
-      if (this.connectionPool && this.config.useConnectionPool) {
+      if (!this.windowPerSession && this.connectionPool && this.config.useConnectionPool) {
         // Return the page to the pool for reuse instead of destroying it
         try {
           const page = await cdpClient.getPageByTargetId(targetId);
@@ -1932,6 +2151,7 @@ export class SessionManager {
    * Handle target closed event
    */
   onTargetClosed(targetId: string): void {
+    this.internalTargets.delete(targetId);
     this.humanHeldTargets.delete(targetId);
     flushRecorderBuffer(targetId);
     this.targetCreationLedger.markClosed(targetId);
@@ -1962,7 +2182,7 @@ export class SessionManager {
     // tab as its anchor. Once no owned tabs remain, the next create call opens
     // a fresh top-level window for that session.
     if (ownerInfo) {
-      const windowKey = `${ownerInfo.sessionId}:${ownerInfo.workerId}`;
+      const windowKey = ownerInfo.sessionId;
       const window = this.sessionWindows.get(windowKey);
       if (window?.anchorTargetId === targetId) {
         const ownerSession = this.sessions.get(ownerInfo.sessionId);
@@ -2112,8 +2332,6 @@ export class SessionManager {
    */
   private async validateTargetsAfterReconnect(): Promise<void> {
     const trackedTargetIds = Array.from(this.targetToWorker.keys());
-    if (trackedTargetIds.length === 0) return;
-
     // Get currently alive targets from Chrome
     let browser;
     try {
@@ -2228,6 +2446,9 @@ export class SessionManager {
 
     const surviving = trackedTargetIds.length - removed;
     console.error(`[SessionManager] Post-reconnect reconciliation: ${removed} removed, ${remapped} re-mapped, ${surviving} surviving, ${indexed} indexed`);
+    setTimeout(() => {
+      this.discoverAbandonedTargets().catch(() => {});
+    }, 0);
   }
 
   // ==================== SESSION INFO ====================

@@ -116,4 +116,38 @@ describe('SessionManager ownership and stale-target contracts (#687 Wave 3 prere
     expect(sm.getTargetOwner('chrome-target')).toBeUndefined();
     expect(sm.getSessionTargetIds('active-session')).toEqual(['known-target']);
   });
+
+  it('atomically transfers every tab in an abandoned window to an empty agent session', async () => {
+    const abandonedId = 'abandoned-test';
+    await sm.createSession({ id: abandonedId, name: 'Abandoned window 77' });
+    await sm.createSession({ id: 'agent-session' });
+    (sm as any).abandonedSessions.add(abandonedId);
+    (sm as any).abandonedWindowSessions.set(77, abandonedId);
+    (sm as any).sessionWindows.set(abandonedId, { windowId: 77, anchorTargetId: 'tab-b' });
+    await sm.registerExternalTarget('tab-a', abandonedId, 'default');
+    await sm.registerExternalTarget('tab-b', abandonedId, 'default');
+
+    const claimed = await sm.claimAbandonedWindow('agent-session', abandonedId);
+
+    expect(claimed).toEqual({ windowId: 77, tabIds: ['tab-a', 'tab-b'] });
+    expect(sm.getTargetOwner('tab-a')).toEqual({ sessionId: 'agent-session', workerId: 'default' });
+    expect(sm.getTargetOwner('tab-b')).toEqual({ sessionId: 'agent-session', workerId: 'default' });
+    expect(sm.getSession(abandonedId)).toBeUndefined();
+    expect((sm as any).sessionWindows.get('agent-session')).toEqual({ windowId: 77, anchorTargetId: 'tab-b' });
+  });
+
+  it('prevents an agent that already owns a window from claiming another', async () => {
+    const abandonedId = 'abandoned-conflict';
+    await sm.createSession({ id: abandonedId });
+    await sm.createSession({ id: 'busy-agent' });
+    (sm as any).abandonedSessions.add(abandonedId);
+    (sm as any).abandonedWindowSessions.set(88, abandonedId);
+    (sm as any).sessionWindows.set(abandonedId, { windowId: 88, anchorTargetId: 'claimable' });
+    (sm as any).sessionWindows.set('busy-agent', { windowId: 99, anchorTargetId: 'busy' });
+    await sm.registerExternalTarget('claimable', abandonedId, 'default');
+    await sm.registerExternalTarget('busy', 'busy-agent', 'default');
+
+    await expect(sm.claimAbandonedWindow('busy-agent', abandonedId)).rejects.toThrow(/already owns a window/);
+    expect(sm.getTargetOwner('claimable')).toEqual({ sessionId: abandonedId, workerId: 'default' });
+  });
 });

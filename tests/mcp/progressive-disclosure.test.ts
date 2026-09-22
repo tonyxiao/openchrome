@@ -86,7 +86,7 @@ describe('MCP progressive disclosure client detection', () => {
 
     expect(init.result?.capabilities?.tools?.listChanged).toBe(true);
     expect(tools).toContain('expand_tools');
-    expect(tools.length).toBeLessThanOrEqual(16);
+    expect(tools.length).toBeLessThanOrEqual(18);
     expect(JSON.stringify(toolDefs).length).toBeLessThanOrEqual(40000);
     expect(tools).toEqual(expect.arrayContaining([
       'navigate',
@@ -99,6 +99,8 @@ describe('MCP progressive disclosure client detection', () => {
       'tabs_context',
       'tabs_create',
       'tabs_close',
+      'windows_abandoned',
+      'window_claim',
       'wait_for',
       'page_screenshot',
       'oc_connection_health',
@@ -126,7 +128,7 @@ describe('MCP progressive disclosure client detection', () => {
     const { tools } = await initializeAndList(server, 'unknown-editor');
 
     expect(tools).toContain('expand_tools');
-    expect(tools.length).toBeLessThanOrEqual(16);
+    expect(tools.length).toBeLessThanOrEqual(18);
     expect(tools).not.toContain('tabs_activate');
   });
 
