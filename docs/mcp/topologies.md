@@ -71,26 +71,6 @@ openchrome setup --client claude --port 9224 --user-data-dir ~/.openchrome/profi
 openchrome setup --client opencode --port 9225 --user-data-dir ~/.openchrome/profiles/opencode
 ```
 
-Or use the built-in isolated preset as a starting point:
-
-```bash
-openchrome config --client codex --topology isolated
-```
-
-## CI/headless and development presets
-
-For reproducible automation, prefer an isolated throwaway profile:
-
-```bash
-openchrome config --client codex --topology ci-headless
-```
-
-For local development, use a named development profile:
-
-```bash
-openchrome config --client claude --topology dev-profile
-```
-
 ## Shared-profile broker trust model
 
 Broker mode is the only supported way for more than one MCP client to share a
@@ -143,9 +123,8 @@ against the same profile.
 
 **CI**
 
-Prefer `openchrome config --client codex --topology ci-headless` or isolated
-profiles per job. Use broker mode in CI only when the job intentionally tests
-multi-client shared-profile behavior.
+Use one visible persistent-profile broker per machine. CI should point clients
+at that broker instead of spawning disposable or secondary browsers.
 
 ### Troubleshooting
 

@@ -59,9 +59,7 @@ describe('TOOL_ANNOTATIONS table', () => {
       'find',
       'inspect',
       'tabs_context',
-      'list_profiles',
       'oc_profile_status',
-      'oc_get_connection_info',
       'oc_connection_health',
       'oc_skill_recall',
       'oc_evidence_get',
@@ -192,7 +190,6 @@ describe('MCPToolDefinition type integration', () => {
     const multiToolExpectations: Record<string, number> = {
       'orchestration.ts': 8,
       'recording.ts': 5,
-      'connect.ts': 3,
     };
     for (const [file, expected] of Object.entries(multiToolExpectations)) {
       const src = await fs.readFile(path.join(toolsDir, file), 'utf8');

@@ -1,7 +1,7 @@
 // Shared types for the tenant API key store.
 // Used across the auth store, HTTP middleware, and admin CLI.
 
-export type Scope = 'read' | 'write' | 'admin' | 'headless-only';
+export type Scope = 'read' | 'write' | 'admin';
 
 export interface ApiKey {
   keyId: string;

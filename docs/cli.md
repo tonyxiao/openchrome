@@ -2,7 +2,7 @@
 
 ## `oc run`
 
-`oc run <tool> [--arg key=value ...] [--json]` executes one MCP tool through the same stdio MCP server used by MCP hosts. The CLI spawns `dist/index.js serve --server-mode`, performs the MCP initialize handshake, calls `tools/list` to validate the tool name, then sends one `tools/call` request.
+`oc run <tool> [--arg key=value ...] [--json]` executes one MCP tool through the same stdio MCP server used by MCP hosts. The CLI spawns `dist/index.js serve`, performs the MCP initialize handshake, calls `tools/list` to validate the tool name, then sends one `tools/call` request.
 
 Examples:
 

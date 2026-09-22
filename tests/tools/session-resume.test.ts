@@ -59,7 +59,6 @@ function makeTab(overrides: Partial<{
   url: string;
   title: string;
   workerLastActivityAt: number;
-  profileDirectory: string;
 }> = {}) {
   return {
     targetId: 'target-aaa',
@@ -373,7 +372,6 @@ describe('generateResumeGuide', () => {
         recoverySource: 'oc_session_snapshot',
         profile: {
           type: 'persistent',
-          profileDirectory: 'Profile 1',
           cookieCopiedAt: Date.now() - 60_000,
         },
         storageState: {
@@ -385,7 +383,6 @@ describe('generateResumeGuide', () => {
     const tabAnalysis = [
       {
         saved: makeTab({
-          profileDirectory: 'Profile 1',
           workerLastActivityAt: Date.now() - 2000,
         }),
         status: 'LIVE' as const,
@@ -397,28 +394,10 @@ describe('generateResumeGuide', () => {
     const guide = generateResumeGuide(snap as any, tabAnalysis);
 
     expect(guide).toContain('Recovery source: oc_session_snapshot');
-    expect(guide).toContain('Profile/storage identity: profile=persistent/Profile 1; storage-state=enabled');
+    expect(guide).toContain('Profile/storage identity: profile=persistent; storage-state=enabled');
     expect(guide).toContain('Cookie sync age:');
-    expect(guide).toContain('profile=Profile 1');
     expect(guide).toContain('lastActivity=');
-    expect(guide).toContain('Auth guidance: reuse the same profileDirectory and storage-state setting');
-  });
-
-  test('warns when auth recovery used a temporary profile', () => {
-    const snap = makeSnapshot({
-      lifecycle: {
-        capturedAt: Date.now(),
-        recoverySource: 'oc_session_snapshot',
-        profile: { type: 'temp' },
-        storageState: { enabled: false },
-      },
-    });
-
-    const guide = generateResumeGuide(snap as any, []);
-
-    expect(guide).toContain('profile=temp; storage-state=disabled');
-    expect(guide).toContain('temporary profile');
-    expect(guide).toContain('may not survive process restart');
+    expect(guide).toContain('Auth guidance: continue in the broker-owned persistent profile');
   });
 
   test('includes completed steps', () => {

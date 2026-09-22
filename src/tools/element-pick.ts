@@ -10,7 +10,6 @@ import {
   validateScreenshotPng,
   type ElementPickRecorderInput,
 } from '../core/element-picker';
-import { getGlobalConfig } from '../config/global';
 
 interface ElementPickSuccess {
   success: true;
@@ -53,14 +52,6 @@ const handler: ToolHandler = async (sessionId: string, args: Record<string, unkn
   if (action !== 'start' && action !== 'cancel') {
     return { content: [{ type: 'text', text: 'Error: action must be "start" or "cancel"' }], isError: true };
   }
-  if (action === 'start' && getGlobalConfig().headless === true) {
-    return jsonResult({
-      success: false,
-      error: 'no_human_attached',
-      remediation: 'Run openchrome without --server-mode or --headless so a human can click the in-page picker overlay.',
-    }, true);
-  }
-
   const sessionManager = getSessionManager();
   const page = await sessionManager.getPage(sessionId, tabId, undefined, 'element_pick');
   if (!page) {

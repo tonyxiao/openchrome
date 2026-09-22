@@ -69,7 +69,6 @@ export class HttpMCPClient {
           'serve',
           '--http', String(this.httpPort),
           '--http-host', '127.0.0.1',
-          '--server-mode',
           '--port', String(this.cdpPort),
           '--user-data-dir', this.userDataDir,
           ...this.extraArgs,

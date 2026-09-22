@@ -27,7 +27,6 @@ interface SnapshotTab {
   title: string;
   lastActivityAt?: number;
   workerLastActivityAt?: number;
-  profileDirectory?: string;
 }
 
 interface SessionLifecycleMetadata {
@@ -36,7 +35,6 @@ interface SessionLifecycleMetadata {
   profile: {
     type: string;
     userDataDir?: string;
-    profileDirectory?: string;
     cookieCopiedAt?: number;
   };
   storageState: {
@@ -366,7 +364,7 @@ export function generateResumeGuide(snapshot: SessionSnapshot, tabAnalysis: TabA
   if (snapshot.lifecycle) {
     const profile = snapshot.lifecycle.profile;
     lines.push(`Recovery source: ${snapshot.lifecycle.recoverySource}`);
-    lines.push(`Profile/storage identity: profile=${profile.type}${profile.profileDirectory ? `/${profile.profileDirectory}` : ''}; storage-state=${snapshot.lifecycle.storageState.enabled ? 'enabled' : 'disabled'}`);
+    lines.push(`Profile/storage identity: profile=${profile.type}; storage-state=${snapshot.lifecycle.storageState.enabled ? 'enabled' : 'disabled'}`);
     if (profile.cookieCopiedAt) {
       lines.push(`Cookie sync age: ${formatRelativeAge(Date.now() - profile.cookieCopiedAt)}`);
     }
@@ -395,7 +393,6 @@ export function generateResumeGuide(snapshot: SessionSnapshot, tabAnalysis: TabA
       const workerContext = [
         `session=${tab.saved.sessionId}`,
         `worker=${tab.saved.workerId}`,
-        ...(tab.saved.profileDirectory ? [`profile=${tab.saved.profileDirectory}`] : []),
         ...(tab.saved.workerLastActivityAt ? [`lastActivity=${formatRelativeAge(Date.now() - tab.saved.workerLastActivityAt)} ago`] : []),
       ].join(', ');
 
@@ -522,14 +519,12 @@ export function generateResumeGuide(snapshot: SessionSnapshot, tabAnalysis: TabA
 
   lines.push('');
   if (closed.length > 0) {
-    lines.push('Recovery guidance: CLOSED targets cannot be reused after restart/reconnect; create a fresh tab with the same URL and profileDirectory/storage-state identity before continuing.');
+    lines.push('Recovery guidance: CLOSED targets cannot be reused after restart/reconnect; create a fresh tab with the same URL in the persistent broker profile before continuing.');
   } else if (remapped.length > 0) {
     lines.push('Recovery guidance: REMAPPED targets survived under a new target id; prefer the currentTargetId shown above.');
   }
-  if (snapshot.lifecycle?.profile.type === 'temp') {
-    lines.push('Auth guidance: this snapshot used a temporary profile, so cookies/localStorage may not survive process restart. Use a persistent/real profile or storage-state for auth reuse.');
-  } else if (snapshot.lifecycle) {
-    lines.push('Auth guidance: reuse the same profileDirectory and storage-state setting when continuing authenticated work.');
+  if (snapshot.lifecycle) {
+    lines.push('Auth guidance: continue in the broker-owned persistent profile so cookies and origin storage remain available.');
   }
   lines.push('Recommended next safe action: verify the live tab state with read_page or tabs_context before mutating the page.');
 

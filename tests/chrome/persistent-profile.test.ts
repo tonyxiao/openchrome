@@ -525,32 +525,6 @@ describe('ProfileManager', () => {
       expect(result.syncPerformed).toBe(false);
     });
 
-    it('should return temp profile when useTempProfile is true', () => {
-      const manager = new ProfileManager();
-      const result = manager.resolveProfile({
-        realProfileDir: '/some/chrome/profile',
-        isProfileLocked: false,
-        useTempProfile: true,
-      });
-
-      expect(result.profileType).toBe('temp');
-      expect(result.userDataDir).toContain('openchrome-');
-      expect(result.syncPerformed).toBe(false);
-    });
-
-    it('should return stable headless-shell profile when usingHeadlessShell is true', () => {
-      const manager = new ProfileManager();
-      const result = manager.resolveProfile({
-        realProfileDir: '/some/chrome/profile',
-        isProfileLocked: false,
-        usingHeadlessShell: true,
-      });
-
-      expect(result.profileType).toBe('headless-shell');
-      expect(result.userDataDir).toContain('headless-shell-profile');
-      expect(result.syncPerformed).toBe(false);
-    });
-
     it('should return real profile when realProfileDir provided and not locked', () => {
       const manager = new ProfileManager();
       const result = manager.resolveProfile({
@@ -887,14 +861,5 @@ describe('ProfileManager', () => {
       fs.rmSync(syncTmpDir, { recursive: true, force: true });
     });
 
-    it('resolveProfile should pass through profileDirectory', () => {
-      const pm = new ProfileManager();
-      const result = pm.resolveProfile({
-        realProfileDir: null,
-        isProfileLocked: false,
-        profileDirectory: 'Profile 1',
-      });
-      expect(result.profileDirectory).toBe('Profile 1');
-    });
   });
 });

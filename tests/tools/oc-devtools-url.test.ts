@@ -5,12 +5,6 @@
 
 import { createMockSessionManager } from '../utils/mock-session';
 
-// Mock getChromePool
-const mockGetInstances = jest.fn();
-jest.mock('../../src/chrome/pool', () => ({
-  getChromePool: jest.fn(() => ({ getInstances: mockGetInstances })),
-}));
-
 // Mock fetchJsonList
 const mockFetchJsonList = jest.fn();
 jest.mock('../../src/chrome/devtools-info', () => ({
@@ -64,7 +58,6 @@ describe('oc_devtools_url tool', () => {
     jest.clearAllMocks();
     delete process.env.OPENCHROME_EXPOSE_DEVTOOLS_URL;
 
-    mockGetInstances.mockReturnValue(new Map()); // empty pool → fall back to default port
     mockFetchJsonList.mockResolvedValue(FIXTURE_PAGES);
 
     mockSessionManager = createMockSessionManager();
@@ -181,28 +174,6 @@ describe('oc_devtools_url tool', () => {
     const result = await handler('default', { workerId: 'nonexistent-worker' });
     const data = JSON.parse(result.content[0].text);
     expect(data.error).toBe('not_found');
-  });
-
-  // --- multi-instance pool ---
-
-  test('walks pool instances to find target port', async () => {
-    mockGetInstances.mockReturnValue(
-      new Map([
-        [9222, { port: 9222 }],
-        [9223, { port: 9223 }],
-      ])
-    );
-    // 9222 returns empty, 9223 has the target; second call for getDevToolsFrontendUrl also from 9223
-    mockFetchJsonList
-      .mockResolvedValueOnce([])           // resolvePortForTarget → port 9222, no match
-      .mockResolvedValueOnce(FIXTURE_PAGES) // resolvePortForTarget → port 9223, match
-      .mockResolvedValueOnce(FIXTURE_PAGES); // getDevToolsFrontendUrl → port 9223
-
-    const { handler } = makeServer(mockSessionManager);
-    const result = await handler('default', { targetId: 'target-abc' });
-    const data = JSON.parse(result.content[0].text);
-    expect(data.targetId).toBe('target-abc');
-    expect(data.url).toBeDefined();
   });
 
   // --- edge cases ---

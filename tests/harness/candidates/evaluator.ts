@@ -83,7 +83,7 @@ export function buildReport(now = new Date('2026-05-13T00:00:00.000Z')): Candida
   return {
     version: 1,
     generatedAt: now.toISOString(),
-    server: { command: 'node dist/cli/index.js serve --server-mode', mode: 'deterministic-local-fixture' },
+    server: { command: 'node dist/cli/index.js serve', mode: 'deterministic-local-fixture' },
     candidates: CANDIDATES,
     scenarios: SCENARIOS,
     scores,

@@ -73,7 +73,6 @@ import { registerOcQueryTool } from './oc-query';
 import { registerShutdownTool } from './shutdown';
 import { registerReapOrphansTool } from './reap-orphans';
 import { registerProfileStatusTool } from './profile-status';
-import { registerListProfilesTool } from './list-profiles';
 
 // AI Agent Continuity tools (#355, #356)
 import { registerSessionSnapshotTool } from './session-snapshot';
@@ -89,7 +88,6 @@ import { registerOcPolicyTool } from './oc-policy';
 import { registerCheckpointTool } from './checkpoint';
 
 // Web AI host connection tools (#523)
-import { registerConnectTools } from './connect';
 
 // Session recording tools (#572)
 import { registerRecordingTools } from './recording';
@@ -476,7 +474,6 @@ export function registerAllTools(
   registerShutdownTool(proxy);
   registerReapOrphansTool(proxy);
   registerProfileStatusTool(proxy);
-  registerListProfilesTool(proxy);
 
   // AI Agent Continuity tools (#355, #356)
   registerSessionSnapshotTool(proxy);
@@ -490,9 +487,6 @@ export function registerAllTools(
 
   // AI Agent Continuity tools (#347 Phase 4)
   registerCheckpointTool(proxy);
-
-  // Web AI host connection tools (#523)
-  registerConnectTools(proxy);
 
   // Session recording tools (#572)
   registerRecordingTools(proxy);

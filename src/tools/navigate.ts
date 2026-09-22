@@ -19,12 +19,6 @@ import { handleCaptcha } from '../captcha/handler';
 import { getSolverRegistry } from '../captcha/solver-registry';
 import { withTimeout } from '../core/deadline/with-timeout';
 import { simulatePresence } from '../stealth/human-behavior';
-import { getHeadedFallback } from '../chrome/headed-fallback';
-import { getGlobalConfig } from '../config/global';
-import {
-  isSingleBrowserProcessMode,
-  secondaryChromePolicyError,
-} from '../config/browser-process-policy';
 import { autoRecallForUrl } from '../core/skill-memory/auto-recall';
 import type { Page } from 'puppeteer-core';
 import { wrapMutatingHandler } from '../core/perception/snapshot-cache-helper';
@@ -156,10 +150,8 @@ async function stealthAutoRetry(
   targetUrl: string,
   workerId: string | undefined,
   stealthSettleMs: number,
-  profileDirectory: string | undefined,
   blockingInfo: BlockingInfo,
   closeTabId?: string,
-  autoFallbackToHeaded: boolean = false,
   context?: ToolContext,
 ): Promise<MCPResult> {
   const sessionManager = getSessionManager();
@@ -171,7 +163,7 @@ async function stealthAutoRetry(
   console.error(`[navigate] Auto-fallback: block detected (${blockingInfo.type}), retrying with stealth...`);
 
   const { targetId, page, workerId: assignedWorkerId } =
-    await sessionManager.createTargetStealth(sessionId, targetUrl, workerId, stealthSettleMs, profileDirectory);
+    await sessionManager.createTargetStealth(sessionId, targetUrl, workerId, stealthSettleMs);
 
   await simulatePresence(page);
 
@@ -207,12 +199,8 @@ async function stealthAutoRetry(
     ...(blocking && { blockingPage: blocking }),
     ...blockingDetectionErrorFields(blockingDetection),
   });
-  // Tier 3: escalate to headed Chrome if stealth retry also got blocked
-  // OR if stealth produced an empty/broken page (can't detect blocking in broken pages).
-  // This is safe because we only reach here after Tier 1 already detected a block. (#459)
   const stealthBlocked = blocking && RETRYABLE_BLOCK_TYPES.has(blocking.type);
-  const stealthBroken = elementCount === 0 || readiness.readyState === 'unknown';
-  // Try CAPTCHA solver before escalating to headed Chrome (#574)
+  // Try the configured CAPTCHA solver in the same persistent visible Chrome.
   if (stealthBlocked && blocking?.type === 'captcha' && getSolverRegistry().isAutoSolveEnabled()) {
     const solveResult = await handleCaptcha(page, blocking);
     if (solveResult.solved) {
@@ -237,207 +225,10 @@ async function stealthAutoRetry(
       });
       return { content: [{ type: 'text', text: resultText }] };
     }
-    console.error(`[navigate] CAPTCHA solve failed: ${solveResult.error}, escalating to Tier 3`);
-  }
-  if (!isSingleBrowserProcessMode() && autoFallbackToHeaded && (stealthBlocked || stealthBroken)) {
-    const headedResult = await headedAutoRetry(targetUrl, blocking || blockingInfo, sessionId, profileDirectory);
-    if (headedResult) return headedResult;
+    console.error(`[navigate] CAPTCHA solve failed: ${solveResult.error}`);
   }
 
   return { content: [{ type: 'text', text: resultText }] };
-}
-
-/** Worker ID used for unprofiled headed fallback tabs */
-const HEADED_WORKER_ID = 'headed';
-
-/**
- * Worker ID for headed pages that were opened with a Chrome profile.
- * Keep this distinct from `profile:<directory>` headless workers because those
- * may already be bound to a profile ChromePool port. Headed pages are indexed
- * into the main CDP client by registerHeadedPage(), so mixing them with a
- * port-bound profile worker sends later tool calls to the wrong CDP client.
- */
-function headedWorkerId(profileDirectory?: string): string {
-  return profileDirectory ? `headed:profile:${profileDirectory}` : HEADED_WORKER_ID;
-}
-
-/**
- * Tier 3 fallback: retry navigation in headed Chrome when stealth also fails.
- * Headed Chrome has a real user-agent and TLS fingerprint, bypassing CDN/WAF detection. (#459)
- * Returns null if headed fallback is not available (no display, no Chrome binary).
- *
- * When sessionId is provided, the headed tab is registered in the session manager
- * so subsequent tools (read_page, interact, screenshot) can access it. (#485)
- */
-async function headedAutoRetry(
-  targetUrl: string,
-  blockingInfo: BlockingInfo,
-  sessionId?: string,
-  profileDirectory?: string,
-): Promise<MCPResult | null> {
-  if (getGlobalConfig().headless === true) {
-    return {
-      isError: true,
-      content: [{ type: 'text', text: JSON.stringify({
-        action: 'navigate', url: targetUrl, status: 'needs_user_input',
-        code: 'HEADED_FALLBACK_REQUIRES_USER', reason: blockingInfo.type,
-        headed: false, visibilityPolicy: 'headless',
-        message: 'Automatic headed fallback was suppressed by the headless policy. Request user interaction before explicitly opening a visible browser.',
-      }) }],
-    };
-  }
-  const headedFallback = getHeadedFallback(getGlobalConfig().port);
-  if (!headedFallback.isAvailable()) {
-    console.error('[navigate] Tier 3 skipped: no display available for headed Chrome');
-    return null;
-  }
-
-  console.error(`[navigate] Auto-fallback Tier 3: stealth also blocked (${blockingInfo.type}), retrying in headed Chrome...`);
-
-  try {
-    // Use persistent navigation so the page stays alive for tool interaction (#485)
-    const result = await headedFallback.navigatePersistent(targetUrl, profileDirectory);
-    let tabId: string | undefined;
-    let assignedWorkerId: string | undefined;
-
-    // Register the headed tab in the session manager for full tool interoperability.
-    // Instead of creating a second CDPClient for the headed Chrome port (which causes
-    // a dual-connection conflict), we inject the page directly into the main CDPClient's
-    // targetIdIndex. This way all tools (read_page, interact, screenshot) work. (#485)
-    if (sessionId) {
-      try {
-        const sessionManager = getSessionManager();
-
-        const resolvedWorkerId = headedWorkerId(profileDirectory);
-
-        // Create/reuse the headed worker WITH the headed Chrome port so that
-        // getCDPClientForWorker() routes CDP commands to the correct instance. (#561)
-        // Profile-scoped headed fallback pages are managed by HeadedFallbackManager
-        // and indexed into the session directly, so do not pass port/profileDirectory
-        // or SessionManager would launch a second ChromePool instance. (#562, #671)
-        const headedPort = headedFallback.getPort();
-        await sessionManager.getOrCreateWorker(sessionId, resolvedWorkerId, {
-          shareCookies: true,
-          ...(!profileDirectory && { port: headedPort }),
-        });
-
-        // Get the live Page object from HeadedFallbackManager and register it
-        const page = headedFallback.getPage(result.targetId);
-        if (page) {
-          if (await sessionManager.registerHeadedPage(result.targetId, sessionId, resolvedWorkerId, page) === false) throw new Error('Target registration refused');
-        } else {
-          // Fallback: register without page injection (navigation-only, no tool access)
-          if (await sessionManager.registerExternalTarget(result.targetId, sessionId, resolvedWorkerId) === false) throw new Error('Target registration refused');
-        }
-
-        tabId = result.targetId;
-        assignedWorkerId = resolvedWorkerId;
-        console.error(`[navigate] Headed tab registered: tabId=${tabId.slice(0, 8)}... workerId=${resolvedWorkerId}`);
-      } catch {
-        const page = headedFallback.getPage(result.targetId);
-        const closed = page ? await page.close().then(() => true, () => false) : false;
-        return { isError: true, content: [{ type: 'text', text: JSON.stringify({
-          code: 'TARGET_REGISTRATION_FAILED', execution: 'completed', targetId: result.targetId,
-          createdTargetClosed: closed, message: 'Navigation ran, but the target could not be admitted. Do not retry side effects blindly.',
-        }) }] };
-      }
-    }
-
-    const resultText = JSON.stringify({
-      action: 'navigate',
-      url: result.url,
-      title: result.title,
-      ...(tabId && { tabId }),
-      ...(assignedWorkerId && { workerId: assignedWorkerId }),
-      created: true,
-      elementCount: result.elementCount,
-      headed: true,
-      stealth: true,
-      fallbackTier: 3,
-      fallbackReason: blockingInfo.type,
-      ...(profileDirectory && { profileDirectory }),
-      ...(result.blockingPage && { blockingPage: result.blockingPage }),
-    });
-    return { content: [{ type: 'text', text: resultText }] };
-  } catch (err) {
-    console.error('[navigate] Tier 3 headed fallback failed:', err instanceof Error ? err.message : err);
-    return null;
-  }
-}
-
-/**
- * Direct headed navigation — user explicitly requested headed: true.
- * Unlike headedAutoRetry (Tier 3 fallback), this does NOT fabricate a BlockingInfo
- * and supports profileDirectory for cookie/session access. (#560, #562)
- */
-async function headedNavigateDirect(
-  targetUrl: string,
-  sessionId: string | undefined,
-  options: { profileDirectory?: string } = {},
-): Promise<MCPResult | null> {
-  const headedFallback = getHeadedFallback(getGlobalConfig().port);
-  if (!headedFallback.isAvailable()) {
-    return null;
-  }
-
-  console.error(`[navigate] User-requested headed mode${options.profileDirectory ? ` with profile "${options.profileDirectory}"` : ''}`);
-
-  try {
-    const result = await headedFallback.navigatePersistent(targetUrl, options.profileDirectory);
-    let tabId: string | undefined;
-    const resolvedWorkerId = headedWorkerId(options.profileDirectory);
-
-    if (sessionId) {
-      try {
-        const sessionManager = getSessionManager();
-        const headedPort = headedFallback.getPort();
-
-        await sessionManager.getOrCreateWorker(sessionId, resolvedWorkerId, {
-          shareCookies: true,
-          // Don't pass port or profileDirectory for profile-scoped headed pages —
-          // they are managed by HeadedFallbackManager and indexed via
-          // registerHeadedPage() into the main CDPClient. Passing profileDirectory
-          // would trigger ChromePool; reusing `profile:<dir>` would route later
-          // tool calls to a port-bound headless profile worker. (#562, #671)
-          ...(!options.profileDirectory && { port: headedPort }),
-        });
-
-        const page = headedFallback.getPage(result.targetId);
-        if (page) {
-          if (await sessionManager.registerHeadedPage(result.targetId, sessionId, resolvedWorkerId, page) === false) throw new Error('Target registration refused');
-        } else {
-          if (await sessionManager.registerExternalTarget(result.targetId, sessionId, resolvedWorkerId) === false) throw new Error('Target registration refused');
-        }
-
-        tabId = result.targetId;
-      } catch {
-        const page = headedFallback.getPage(result.targetId);
-        const closed = page ? await page.close().then(() => true, () => false) : false;
-        return { isError: true, content: [{ type: 'text', text: JSON.stringify({
-          code: 'TARGET_REGISTRATION_FAILED', execution: 'completed', targetId: result.targetId,
-          createdTargetClosed: closed, message: 'Navigation ran, but the target could not be admitted. Do not retry side effects blindly.',
-        }) }] };
-      }
-    }
-
-    const resultText = JSON.stringify({
-      action: 'navigate',
-      url: result.url,
-      title: result.title,
-      ...(tabId && { tabId }),
-      ...(resolvedWorkerId && { workerId: resolvedWorkerId }),
-      created: true,
-      elementCount: result.elementCount,
-      headed: true,
-      userRequested: true,
-      ...(options.profileDirectory && { profileDirectory: options.profileDirectory }),
-      ...(result.blockingPage && { blockingPage: result.blockingPage }),
-    });
-    return { content: [{ type: 'text', text: resultText }] };
-  } catch (err) {
-    console.error('[navigate] Headed navigation failed:', err instanceof Error ? err.message : err);
-    return null;
-  }
 }
 
 async function withDomainSkillsResult(
@@ -495,14 +286,6 @@ const definition: MCPToolDefinition = {
         type: 'boolean',
         description: 'Auto-retry with stealth when CDN/WAF block is detected (access-denied, bot-check, captcha). Default: true. Set false to disable.',
       },
-      headed: {
-        type: 'boolean',
-        description: 'Compatibility hint. In single-browser-process mode the broker is already visible/headed, so this never launches another Chrome.',
-      },
-      profileDirectory: {
-        type: 'string',
-        description: 'Chrome profile directory name. Disabled when the broker enforces one visible persistent-profile Chrome process.',
-      },
       recall: {
         type: 'boolean',
         description: 'Override OPENCHROME_AUTO_RECALL for this call. true forces domain skill injection; false suppresses it even when the flag is on.',
@@ -526,23 +309,7 @@ const handler: ToolHandler = async (
   throwIfAborted(context);
   let tabId = args.tabId as string | undefined;
   const url = args.url as string;
-  const profileDirectory = args.profileDirectory as string | undefined;
   const recallArg = args.recall as boolean | undefined;
-  const singleBrowserProcess = isSingleBrowserProcessMode();
-  if (profileDirectory && singleBrowserProcess) {
-    return {
-      content: [{ type: 'text', text: secondaryChromePolicyError('profileDirectory') }],
-      isError: true,
-    };
-  }
-  // P1-6: reject workerId + profileDirectory combination
-  if (args.workerId && profileDirectory) {
-    return {
-      content: [{ type: 'text', text: 'Error: workerId and profileDirectory cannot be used together. Use profileDirectory alone (a worker is auto-created per profile).' }],
-      isError: true,
-    };
-  }
-  // Auto-generate a profile-scoped workerId when profileDirectory is specified.
   // If taskId+laneId are supplied, route creation through the lane worker and
   // default tabId to the lane's most recent target. This is additive: callers
   // that omit laneId keep the existing worker/tab semantics.
@@ -563,11 +330,10 @@ const handler: ToolHandler = async (
       return { content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : String(error)}` }], isError: true };
     }
   }
-  const workerId = laneWorkerId || (args.workerId as string | undefined) || (profileDirectory ? `profile:${profileDirectory}` : undefined);
+  const workerId = laneWorkerId || (args.workerId as string | undefined);
   const stealth = args.stealth as boolean | undefined;
   const stealthSettleMs = Math.min(Math.max((args.stealthSettleMs as number) || 8000, 1000), 30000);
   const autoFallback = args.autoFallback !== false; // default: true
-  const headed = args.headed as boolean | undefined;
   const stealthIgnoredWarning = stealth && tabId ? 'stealth mode only works when creating new tabs (omit tabId). The stealth parameter was ignored for this navigation.' : undefined;
   const sessionManager = getSessionManager();
 
@@ -633,19 +399,6 @@ const handler: ToolHandler = async (
       // Domain blocklist check on normalized URL
       assertDomainAllowed(targetUrl);
 
-      // A single-process broker is already visible/headed. Treat the legacy
-      // hint as a no-op so it can never create a temporary-profile Chrome.
-      if (headed && singleBrowserProcess) {
-        console.error('[navigate] headed=true satisfied by the existing visible broker Chrome');
-      } else if (headed) {
-        const headedResult = await headedNavigateDirect(targetUrl, sessionId, { profileDirectory });
-        if (headedResult) return await withDomainSkillsResult(headedResult, recallArg);
-        return {
-          content: [{ type: 'text', text: 'Error: headed mode requested but no display available for headed Chrome.' }],
-          isError: true,
-        };
-      }
-
       // Tab reuse: if worker has exactly 1 existing tab, reuse it instead of creating new
       const resolvedWorkerId = workerId || 'default';
       const existingTargets = sessionManager.getWorkerTargetIds(sessionId, resolvedWorkerId);
@@ -703,7 +456,7 @@ const handler: ToolHandler = async (
             // Auto-fallback: if reused tab hit a CDN/WAF block, retry with stealth in a new tab (#459)
             if (reuseBlocking && autoFallback && RETRYABLE_BLOCK_TYPES.has(reuseBlocking.type)) {
               return await withDomainSkillsResult(
-                await stealthAutoRetry(sessionId, targetUrl, workerId, stealthSettleMs, profileDirectory, reuseBlocking, undefined, autoFallback && !singleBrowserProcess, context),
+                await stealthAutoRetry(sessionId, targetUrl, workerId, stealthSettleMs, reuseBlocking, undefined, context),
                 recallArg,
               );
             }
@@ -740,8 +493,8 @@ const handler: ToolHandler = async (
       // Create new tab with URL directly (in specified worker or default)
       // Use stealth mode (CDP-free load) when requested, e.g. for Cloudflare Turnstile pages
       const { targetId, page, workerId: assignedWorkerId } = stealth
-        ? await sessionManager.createTargetStealth(sessionId, targetUrl, workerId, stealthSettleMs, profileDirectory)
-        : await sessionManager.createTarget(sessionId, targetUrl, workerId, profileDirectory);
+        ? await sessionManager.createTargetStealth(sessionId, targetUrl, workerId, stealthSettleMs)
+        : await sessionManager.createTarget(sessionId, targetUrl, workerId);
 
       // Stealth mode: simulate human presence to generate behavioral telemetry
       // that enterprise anti-bot sensors (Radware, PerimeterX, Akamai) require.
@@ -770,16 +523,9 @@ const handler: ToolHandler = async (
       // Auto-fallback: if new tab hit a CDN/WAF block and stealth wasn't already used, retry with stealth (#459)
       if (newTabBlocking && !stealth && autoFallback && RETRYABLE_BLOCK_TYPES.has(newTabBlocking.type)) {
         return await withDomainSkillsResult(
-          await stealthAutoRetry(sessionId, targetUrl, workerId, stealthSettleMs, profileDirectory, newTabBlocking, targetId, autoFallback && !singleBrowserProcess, context),
+          await stealthAutoRetry(sessionId, targetUrl, workerId, stealthSettleMs, newTabBlocking, targetId, context),
           recallArg,
         );
-      }
-
-      // When explicit stealth hits a block, escalate directly to tier 3 (headed Chrome)
-      // since tier 2 (stealth) is already being used. (#453)
-      if (newTabBlocking && stealth && autoFallback && !singleBrowserProcess && RETRYABLE_BLOCK_TYPES.has(newTabBlocking.type)) {
-        const headedResult = await headedAutoRetry(targetUrl, newTabBlocking, sessionId, profileDirectory);
-        if (headedResult) return await withDomainSkillsResult(headedResult, recallArg);
       }
 
       const newTabUrl = page.url();

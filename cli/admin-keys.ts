@@ -24,7 +24,7 @@ import { Command } from 'commander';
 // Types mirrored from src/auth/api-key-types.ts so the CLI tsconfig (rootDir=./cli)
 // can compile without depending on the src tree directly. Runtime resolves the
 // real ApiKeyStore via require() against dist/auth/api-key-store.js.
-type Scope = 'read' | 'write' | 'admin' | 'headless-only';
+type Scope = 'read' | 'write' | 'admin';
 
 interface ApiKey {
   keyId: string;
@@ -58,7 +58,6 @@ const VALID_SCOPES: ReadonlySet<Scope> = new Set<Scope>([
   'read',
   'write',
   'admin',
-  'headless-only',
 ]);
 
 function requireAdminToken(): void {
@@ -100,13 +99,13 @@ export function _setStoreLoader(loader: () => ApiKeyStoreCtor): void {
 
 function coerceScopes(values: string[] | undefined): Scope[] {
   if (!values || values.length === 0) {
-    console.error('Error: at least one --scope is required (read|write|admin|headless-only).');
+    console.error('Error: at least one --scope is required (read|write|admin).');
     process.exit(1);
   }
   const out: Scope[] = [];
   for (const v of values) {
     if (!VALID_SCOPES.has(v as Scope)) {
-      console.error(`Error: invalid scope "${v}". Allowed: read, write, admin, headless-only.`);
+      console.error(`Error: invalid scope "${v}". Allowed: read, write, admin.`);
       process.exit(1);
     }
     if (!out.includes(v as Scope)) out.push(v as Scope);
@@ -159,7 +158,7 @@ export function registerAdminKeysCommand(program: Command): void {
     .requiredOption('--tenant <id>', 'Tenant identifier (e.g. acme)')
     .option(
       '--scope <scope>',
-      'Scope (read|write|admin|headless-only). Repeat for multiple.',
+      'Scope (read|write|admin). Repeat for multiple.',
       (value: string, previous: string[] | undefined) => {
         const arr = previous ?? [];
         arr.push(value);

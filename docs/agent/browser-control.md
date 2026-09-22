@@ -2,15 +2,15 @@
 
 `oc_browser_control` exposes current operation facts and a small human input lease. The host still owns the task, account choice and decision to continue.
 
-## Start without keeping a blank window open
+## Start the visible persistent browser
 
-From a directory where the candidate package is installed, start its standalone MCP entrypoint with an isolated browser:
+From a directory where the candidate package is installed, start its MCP entrypoint:
 
 ```bash
-node ./node_modules/openchrome-mcp/dist/index.js --headless --launch-mode isolated --no-auto-elect
+node ./node_modules/openchrome-mcp/dist/index.js serve --auto-launch
 ```
 
-Browser startup remains lazy: listing tools does not launch Chrome; the first browser operation does. Explicit headless mode prevents automatic headed fallback. The acceptance harness tests this standalone configuration; attached user browsers and shared broker deployment require their corresponding configuration.
+Browser startup remains lazy: listing tools does not launch Chrome; the first browser operation starts the one visible Chrome process with its persistent profile.
 
 ## Inspect a background tab
 
@@ -22,7 +22,7 @@ These are in-memory observations, not a durable execution journal. History is bo
 
 1. Call `pause` for the target. Keep the returned `lease` and logical `sessionId`.
 2. Poll `status` until `phase` is `human`. While `draining`, an earlier tracked write is still pending. New writes to that target are refused before dispatch. Writes with unknown scope, including arbitrary JavaScript, are conservatively blocked while any target is held.
-3. For an already visible browser, `pause` with `reveal:true` explicitly brings the tab forward once drained. Headless Chrome is not restarted automatically. Its response describes the visibility limitation.
+3. `pause` with `reveal:true` explicitly brings the visible browser tab forward once drained.
 4. After the person finishes, call `resume` with the lease and exact `expectedUrl`. Optionally supply a visible CSS `selector` and exact trimmed `expectedText`, such as the account identifier displayed by the site.
 5. A mismatch keeps the lease paused. Successful resume discards old element references; read the page again before acting.
 

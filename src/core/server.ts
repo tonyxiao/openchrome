@@ -20,14 +20,11 @@ import { getMCPServer, setMCPServerOptions, _resetMCPServerForTesting } from '..
 import { registerAllTools } from '../tools';
 import { createTransport } from '../transports/index';
 import { getGlobalConfig, setGlobalConfig } from '../config/global';
-import { resolveHeadlessMode } from '../config/headless-resolver';
-import { assertSingleBrowserProcessIsHeaded } from '../config/browser-process-policy';
 import { resolveWindowBoundsConfig } from '../config/window-bounds';
 import { ToolTier } from '../config/tool-tiers';
 import { bootstrapPilot, logActiveFlags, stopPilotBootstrap } from '../harness/flags';
 import { getChromeLauncher, _resetChromeLauncherForTesting } from '../chrome/launcher';
 import { getSessionManager, _resetSessionManagerForTesting } from '../session-manager';
-import { resetChromePool } from '../chrome/pool';
 import { getCDPClient, _resetCDPClientForTesting, _resetCDPClientFactoryForTesting } from '../cdp/client';
 import { getBrowserStateManager } from '../browser-state';
 import { HTTPTransport } from '../transports/http';
@@ -75,12 +72,9 @@ export interface CreateServerOptions {
   chrome?: {
     port?: number;
     userDataDir?: string;
-    profileDirectory?: string;
     chromeBinary?: string;
     launchMode?: 'auto' | 'attach' | 'isolated';
     autoLaunch?: boolean;
-    headless?: boolean;
-    headlessShell?: boolean;
     restartChrome?: boolean;
     windowSize?: string;
     windowPosition?: string;
@@ -125,7 +119,6 @@ function _resetAllSingletons(): void {
   _resetMCPServerForTesting();
   _resetChromeLauncherForTesting();
   _resetSessionManagerForTesting();
-  resetChromePool();
   _resetCDPClientForTesting();
   _resetCDPClientFactoryForTesting();
 }
@@ -194,9 +187,7 @@ class OpenChromeServerImpl implements OpenChromeServer {
     const port = chrome.port ?? 9222;
     const autoLaunch = chrome.autoLaunch ?? false;
     const userDataDir = chrome.userDataDir ?? process.env.CHROME_USER_DATA_DIR ?? undefined;
-    const profileDirectory = chrome.profileDirectory ?? process.env.CHROME_PROFILE_DIRECTORY ?? undefined;
     const chromeBinary = chrome.chromeBinary ?? process.env.CHROME_BINARY ?? undefined;
-    const useHeadlessShell = chrome.headlessShell ?? false;
     const restartChrome = chrome.restartChrome ?? false;
 
     console.error('[openchrome] Starting MCP server');
@@ -207,20 +198,6 @@ class OpenChromeServerImpl implements OpenChromeServer {
 
     console.error(`[openchrome] Chrome debugging port: ${port}`);
     console.error(`[openchrome] Auto-launch Chrome: ${autoLaunch}`);
-
-    // Headless resolution
-    let headless: boolean;
-    try {
-      const mode = resolveHeadlessMode(
-        { headless: chrome.headless, visible: undefined },
-        { OPENCHROME_HEADLESS: process.env.OPENCHROME_HEADLESS },
-        { headless: getGlobalConfig().headless },
-      );
-      headless = mode === 'headless';
-      assertSingleBrowserProcessIsHeaded(headless);
-    } catch (err) {
-      throw new Error(`[openchrome] ${(err as Error).message}`);
-    }
 
     // Window bounds
     let windowConfig;
@@ -243,7 +220,7 @@ class OpenChromeServerImpl implements OpenChromeServer {
       throw new Error(`[openchrome] ${(err as Error).message}`);
     }
 
-    setGlobalConfig({ port, autoLaunch, userDataDir, profileDirectory, chromeBinary, useHeadlessShell, headless, restartChrome, ...windowConfig });
+    setGlobalConfig({ port, autoLaunch, userDataDir, chromeBinary, restartChrome, ...windowConfig });
 
     // Security
     if (opts.security?.blockedDomains?.length) {

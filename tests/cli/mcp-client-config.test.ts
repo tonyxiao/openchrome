@@ -22,11 +22,10 @@ describe('cli/mcp-client-config', () => {
     expect(getServeArgs({ dashboard: true })).toEqual(['serve', '--auto-launch', '--auto-elect', '--minimal', '--dashboard']);
   });
 
-  test('getServeArgs preserves explicit port and profile topology', () => {
+  test('getServeArgs preserves explicit port and persistent profile root', () => {
     expect(getServeArgs({
       port: 9333,
       userDataDir: '/tmp/openchrome-codex',
-      profileDirectory: 'Default',
       launchMode: 'isolated',
     })).toEqual([
       'serve',
@@ -37,8 +36,6 @@ describe('cli/mcp-client-config', () => {
       '9333',
       '--user-data-dir',
       '/tmp/openchrome-codex',
-      '--profile-directory',
-      'Default',
       '--launch-mode',
       'isolated',
     ]);
@@ -54,20 +51,6 @@ describe('cli/mcp-client-config', () => {
     ]);
     expect(getServeArgs({ topology: 'broker-client', port: 9222, userDataDir: '/tmp/shared' })).toEqual([
       'serve', '--minimal', '--connect-broker', '--port', '9222', '--user-data-dir', '/tmp/shared',
-    ]);
-  });
-
-  test('isolated topology preset chooses a non-default port and profile', () => {
-    expect(getServeArgs({ topology: 'isolated' })).toEqual([
-      'serve',
-      '--auto-launch',
-      '--minimal',
-      '--port',
-      '9223',
-      '--user-data-dir',
-      '~/.openchrome/profiles/isolated',
-      '--launch-mode',
-      'isolated',
     ]);
   });
 

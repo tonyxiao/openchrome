@@ -36,7 +36,7 @@ function makeMockPage(url: string, title: string) {
 
 function makeMockSessionManager(sessions: Array<{
   id: string;
-  workers: Array<{ id: string; targetIds: string[]; profileDirectory?: string; lastActivityAt?: number }>;
+  workers: Array<{ id: string; targetIds: string[]; lastActivityAt?: number }>;
   lastActivityAt?: number;
   pages?: Record<string, { url: string; title: string }>;
 }>) {
@@ -53,7 +53,6 @@ function makeMockSessionManager(sessions: Array<{
       targetCount: w.targetIds.length,
       createdAt: Date.now(),
       lastActivityAt: w.lastActivityAt ?? Date.now(),
-      ...(w.profileDirectory && { profileDirectory: w.profileDirectory }),
     })),
   }));
 
@@ -152,7 +151,7 @@ describe('oc_session_snapshot', () => {
         {
           id: 'session-1',
           lastActivityAt: sessionActivity,
-          workers: [{ id: 'default', targetIds: ['target-1', 'target-2'], profileDirectory: 'Profile 1', lastActivityAt: workerActivity }],
+          workers: [{ id: 'default', targetIds: ['target-1', 'target-2'], lastActivityAt: workerActivity }],
           pages: {
             'target-1': { url: 'https://example.com', title: 'Example' },
             'target-2': { url: 'https://google.com', title: 'Google' },
@@ -173,7 +172,6 @@ describe('oc_session_snapshot', () => {
         title: 'Example',
         lastActivityAt: sessionActivity,
         workerLastActivityAt: workerActivity,
-        profileDirectory: 'Profile 1',
       });
       expect(tabs[1]).toMatchObject({
         targetId: 'target-2',

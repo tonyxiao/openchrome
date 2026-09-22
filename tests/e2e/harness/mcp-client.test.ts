@@ -191,7 +191,7 @@ describe('MCPClient lifecycle', () => {
 
   test('passes harness serve args to spawn and clears each request timeout on response', async () => {
     process.env.CI = 'true';
-    process.env.OPENCHROME_E2E_SERVER_ARGS = '--server-mode --headless-shell';
+    process.env.OPENCHROME_E2E_SERVER_ARGS = '--minimal';
     const child = new FakeChildProcess();
     const client = new MCPClient({ args: ['--port', '9444'], timeoutMs: 10_000 });
 
@@ -201,8 +201,7 @@ describe('MCPClient lifecycle', () => {
     expect(spawnArgs.slice(1)).toEqual([
       'serve',
       '--auto-launch',
-      '--server-mode',
-      '--headless-shell',
+      '--minimal',
       '--port',
       '9444',
     ]);

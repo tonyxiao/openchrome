@@ -108,8 +108,7 @@ describe('NavigateTool - Stealth Mode', () => {
         testSessionId,
         'https://example.com',
         undefined,
-        8000,
-        undefined
+        8000
       );
     });
 
@@ -126,8 +125,7 @@ describe('NavigateTool - Stealth Mode', () => {
         testSessionId,
         'https://example.com',
         undefined,
-        10000,
-        undefined
+        10000
       );
     });
 
@@ -144,8 +142,7 @@ describe('NavigateTool - Stealth Mode', () => {
         testSessionId,
         'https://example.com',
         undefined,
-        1000,
-        undefined
+        1000
       );
     });
 
@@ -162,8 +159,7 @@ describe('NavigateTool - Stealth Mode', () => {
         testSessionId,
         'https://example.com',
         undefined,
-        30000,
-        undefined
+        30000
       );
     });
 
@@ -210,8 +206,7 @@ describe('NavigateTool - Stealth Mode', () => {
         testSessionId,
         'https://example.com',
         'worker-1',
-        8000,
-        undefined
+        8000
       );
     });
 
@@ -227,8 +222,7 @@ describe('NavigateTool - Stealth Mode', () => {
         testSessionId,
         'https://example.com',
         undefined,
-        8000,
-        undefined
+        8000
       );
     });
   });
@@ -251,8 +245,7 @@ describe('NavigateTool - Stealth Mode', () => {
         testSessionId,
         'https://turnstile-protected.com',
         undefined,
-        8000,
-        undefined
+        8000
       );
       expect(mockSmartGotoFn).not.toHaveBeenCalled();
     });
@@ -290,8 +283,7 @@ describe('NavigateTool - Stealth Mode', () => {
         testSessionId,
         'https://turnstile-protected.com',
         undefined,
-        15000,
-        undefined
+        15000
       );
       expect(mockSmartGotoFn).not.toHaveBeenCalled();
     });
@@ -313,8 +305,7 @@ describe('NavigateTool - Stealth Mode', () => {
         testSessionId,
         'https://turnstile-protected.com',
         'worker-stealth',
-        8000,
-        undefined
+        8000
       );
       expect(mockSmartGotoFn).not.toHaveBeenCalled();
     });

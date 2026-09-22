@@ -2,7 +2,7 @@
  * ProfileManager - Persistent OpenChrome Profile Architecture
  *
  * Manages a persistent Chrome profile directory at ~/.openchrome/profile/
- * instead of creating disposable temp profiles on every launch.
+ * and never creates disposable browser profiles.
  * Provides atomic cookie sync using the SQLite backup API.
  */
 
@@ -15,7 +15,7 @@ import { execFileSync } from 'child_process';
 // Types
 // ---------------------------------------------------------------------------
 
-export type ProfileType = 'real' | 'persistent' | 'temp' | 'explicit' | 'headless-shell';
+export type ProfileType = 'real' | 'persistent' | 'explicit';
 
 export interface SyncMetadata {
   lastSyncTimestamp: number;
@@ -29,8 +29,6 @@ export interface ProfileResolution {
   userDataDir: string;
   profileType: ProfileType;
   syncPerformed: boolean;
-  /** The resolved profile directory name (e.g., "Default", "Profile 1") */
-  profileDirectory?: string;
 }
 
 export interface ChromeProfileInfo {
@@ -198,7 +196,7 @@ export class ProfileManager {
     }
 
     // Guard: if the persistent profile's Cookies file has been modified after
-    // the last sync, a headless session wrote cookies — do not overwrite them.
+    // the last sync, the managed session wrote cookies — do not overwrite them.
     const persistentCookiesPath = path.join(
       ProfileManager.PERSISTENT_PROFILE_DIR,
       profileSubdir,
@@ -208,7 +206,7 @@ export class ProfileManager {
       const persistentStat = fs.statSync(persistentCookiesPath);
       if (persistentStat.mtimeMs > metadata.lastSyncTimestamp) {
         console.error(
-          '[ProfileManager] Persistent profile cookies modified after last sync — skipping overwrite to preserve headless-acquired session'
+          '[ProfileManager] Persistent profile cookies modified after last sync — skipping overwrite to preserve the managed session'
         );
         return false;
       }
@@ -433,29 +431,22 @@ export class ProfileManager {
    *
    * Priority order:
    * 1. `explicitUserDataDir` — caller has specified an exact directory.
-   * 2. `useTempProfile` or `usingHeadlessShell` — create a fresh temp dir.
-   * 3. `realProfileDir` exists, **not** locked, and `isAutoLaunch` is false —
+   * 2. `realProfileDir` exists, **not** locked, and `isAutoLaunch` is false —
    *    use real profile directly.
-   * 4. `realProfileDir` exists and is **locked**, OR `isAutoLaunch` is true —
+   * 3. `realProfileDir` exists and is **locked**, OR `isAutoLaunch` is true —
    *    use persistent profile, syncing cookies from the real profile when stale.
-   * 5. No `realProfileDir` — use persistent profile without a sync.
+   * 4. No `realProfileDir` — use persistent profile without a sync.
    */
   resolveProfile(options: {
     realProfileDir: string | null;
     isProfileLocked: boolean;
     explicitUserDataDir?: string;
-    useTempProfile?: boolean;
-    usingHeadlessShell?: boolean;
-    profileDirectory?: string;
     isAutoLaunch?: boolean;
   }): ProfileResolution {
     const {
       realProfileDir,
       isProfileLocked,
       explicitUserDataDir,
-      useTempProfile,
-      usingHeadlessShell,
-      profileDirectory,
       isAutoLaunch,
     } = options;
 
@@ -465,32 +456,10 @@ export class ProfileManager {
         userDataDir: explicitUserDataDir,
         profileType: 'explicit',
         syncPerformed: false,
-        ...(profileDirectory && { profileDirectory }),
       };
     }
 
-    // 2. Temp profile or headless-shell
-    if (useTempProfile) {
-      const tempDir = path.join(os.tmpdir(), `openchrome-${Date.now()}`);
-      return {
-        userDataDir: tempDir,
-        profileType: 'temp',
-        syncPerformed: false,
-        ...(profileDirectory && { profileDirectory }),
-      };
-    }
-
-    if (usingHeadlessShell) {
-      const stableDir = path.join(os.homedir(), '.openchrome', 'headless-shell-profile');
-      return {
-        userDataDir: stableDir,
-        profileType: 'headless-shell',
-        syncPerformed: false,
-        ...(profileDirectory && { profileDirectory }),
-      };
-    }
-
-    // 3. Real profile available and NOT locked
+    // 2. Real profile available and NOT locked
     // Skip when auto-launching: Chrome 136+ rejects --remote-debugging-port with the
     // default --user-data-dir. Fall through to persistent profile with cookie sync.
     if (realProfileDir && !isProfileLocked && !isAutoLaunch) {
@@ -498,11 +467,10 @@ export class ProfileManager {
         userDataDir: realProfileDir,
         profileType: 'real',
         syncPerformed: false,
-        ...(profileDirectory && { profileDirectory }),
       };
     }
 
-    // 4. Real profile exists but IS locked (or auto-launch) — use persistent profile
+    // 3. Real profile exists but IS locked (or auto-launch) — use persistent profile
     //    When isAutoLaunch is true, Chrome 136+ requires a non-default --user-data-dir,
     //    so we use the persistent profile even when the real profile is not locked.
     if (realProfileDir && (isProfileLocked || isAutoLaunch)) {
@@ -514,7 +482,6 @@ export class ProfileManager {
           userDataDir: persistentDir,
           profileType: 'persistent',
           syncPerformed: false,
-          ...(profileDirectory && { profileDirectory }),
         };
       }
 
@@ -524,17 +491,15 @@ export class ProfileManager {
         userDataDir: persistentDir,
         profileType: 'persistent',
         syncPerformed: syncResult.atomic,
-        ...(profileDirectory && { profileDirectory }),
       };
     }
 
-    // 5. No real profile at all — use persistent profile (no sync needed)
+    // 4. No real profile at all — use persistent profile (no sync needed)
     const persistentDir = this.getOrCreatePersistentProfile();
     return {
       userDataDir: persistentDir,
       profileType: 'persistent',
       syncPerformed: false,
-      ...(profileDirectory && { profileDirectory }),
     };
   }
 
@@ -583,7 +548,7 @@ export class ProfileManager {
 
   /**
    * Patch exit_type in the Default profile's Preferences file to prevent
-   * Chrome's "restore pages" prompt which can block headless operation.
+   * Chrome's "restore pages" prompt which can block managed operation.
    */
   private patchPreferencesExitType(profileDir: string, profileSubdir: string = 'Default'): void {
     const prefsPath = path.join(profileDir, profileSubdir, 'Preferences');

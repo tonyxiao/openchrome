@@ -16,12 +16,11 @@ const LEGACY_SESSION_FILES = [
  */
 export function clearChromeSessionRestoreState(
   userDataDir: string,
-  profileDirectory = 'Default',
 ): string[] {
   const root = path.resolve(userDataDir);
-  const profileDir = path.resolve(root, profileDirectory);
+  const profileDir = path.resolve(root, 'Default');
   if (profileDir !== root && !profileDir.startsWith(root + path.sep)) {
-    throw new Error(`Profile directory escapes user-data-dir: ${profileDirectory}`);
+    throw new Error('Default profile directory escapes user-data-dir');
   }
 
   const removed: string[] = [];

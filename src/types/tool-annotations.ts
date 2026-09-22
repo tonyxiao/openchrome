@@ -70,14 +70,12 @@ export const TOOL_ANNOTATIONS = {
   page_content: READ_ONLY,
   tabs_context: READ_ONLY,
   oc_browser_control: MUTATES,
-  list_profiles: READ_ONLY,
   // `console_capture` supports `clear` which deletes buffered logs, plus
   // `start`/`stop` which mutate module-level capture state — destructive
   // under the worst-case rule.
   console_capture: DESTRUCTIVE,
   performance_metrics: READ_ONLY,
   oc_profile_status: READ_ONLY,
-  oc_get_connection_info: READ_ONLY,
   oc_connection_health: READ_ONLY,
   oc_policy: READ_ONLY,
   oc_skill_recall: READ_ONLY,
@@ -183,8 +181,6 @@ export const TOOL_ANNOTATIONS = {
   oc_evidence_bundle: MUTATES,
   oc_recording_start: MUTATES,
   oc_recording_export: MUTATES,
-  oc_copy_to_clipboard: MUTATES,
-  oc_open_host_settings: MUTATES,
   oc_totp_generate: MUTATES,
   page_pdf: MUTATES,
   page_screenshot: MUTATES,

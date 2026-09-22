@@ -13,9 +13,7 @@
 //     tool added without updating this file will reject read-only keys
 //     instead of silently granting them mutation capability.
 //
-// Scope implication: admin > write > read. 'headless-only' is an
-// AND-constraint the caller must enforce separately; it is not in the
-// implication chain.
+// Scope implication: admin > write > read.
 
 import type { Scope } from './api-key-types';
 
@@ -35,7 +33,6 @@ export const READ_TOOLS: ReadonlySet<ToolId> = new Set<ToolId>([
 
   // Tab / session / profile introspection
   'tabs_context',
-  'list_profiles',
   'oc_profile_status',
   'oc_get_connection_info',
   'oc_connection_health',

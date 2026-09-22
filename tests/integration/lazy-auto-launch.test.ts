@@ -144,7 +144,6 @@ describeFn('lazy --auto-launch process contract (#1528)', () => {
         ENTRY,
         'serve',
         '--auto-launch',
-        '--headless',
         '--port', String(cdpPort),
         '--http', String(httpPort),
         '--http-host', '127.0.0.1',
@@ -194,8 +193,6 @@ describeFn('lazy --auto-launch process contract (#1528)', () => {
         ['expand_tools', { tier: '3' }],
         ['oc_connection_health', {}],
         ['oc_doctor_report', {}],
-        ['oc_get_connection_info', { host: 'openchrome' }],
-        ['list_profiles', { userDataDir }],
         ['oc_normalize_action', { action: { type: 'click', x: 1, y: 1 } }],
         ['oc_policy', { action: 'matrix' }],
         ['oc_assert', {
@@ -249,101 +246,6 @@ describeFn('lazy --auto-launch process contract (#1528)', () => {
       expect(stderr).toContain('releasing controller lock and exiting');
       expect(jsonFileCount(lockDir)).toBe(0);
       expect(jsonFileCount(brokerDir)).toBe(0);
-    } finally {
-      await terminate(child);
-      fs.rmSync(tmp, { recursive: true, force: true });
-    }
-  });
-
-  test('--server-mode remains eager and attempts Chrome before opening the transport', async () => {
-    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'openchrome-eager-startup-'));
-    const home = path.join(tmp, 'home');
-    const lockDir = path.join(tmp, 'locks');
-    const userDataDir = path.join(tmp, 'profile');
-    const missingChrome = path.join(tmp, 'missing-chrome');
-    fs.mkdirSync(home, { recursive: true });
-    const cdpPort = await allocatePort();
-    let child: ChildProcessWithoutNullStreams | null = null;
-    let stderr = '';
-
-    try {
-      child = spawn(process.execPath, [
-        ENTRY,
-        'serve',
-        '--server-mode',
-        '--no-auto-elect',
-        '--port', String(cdpPort),
-        '--user-data-dir', userDataDir,
-        '--chrome-binary', missingChrome,
-      ], {
-        cwd: REPO_ROOT,
-        stdio: ['pipe', 'pipe', 'pipe'],
-        env: {
-          ...process.env,
-          HOME: home,
-          OPENCHROME_CONTROLLER_LOCK_DIR: lockDir,
-          OPENCHROME_PPID_WATCH: '0',
-          OPENCHROME_HEALTH_ENDPOINT: '0',
-          OPENCHROME_RECOVERY_LEDGER: '0',
-          CHROME_LAUNCH_TIMEOUT_MS: '1500',
-        },
-      });
-      child.stderr.on('data', (chunk: Buffer) => { stderr += chunk.toString('utf8'); });
-
-      const exit = await waitForExit(child, 20_000);
-      expect(exit.code).toBe(OWNER_SELF_RELEASE_EXIT_CODE);
-      expect(stderr).toContain('Chrome startup policy: eager');
-      expect(stderr).toContain('[ChromeLauncher] Launching Chrome');
-      expect(stderr).not.toContain('STDIO transport enabled');
-      expect(jsonFileCount(lockDir)).toBe(0);
-    } finally {
-      await terminate(child);
-      fs.rmSync(tmp, { recursive: true, force: true });
-    }
-  });
-
-  test('eager startup does not open a transport after an inconclusive debug-port timeout', async () => {
-    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'openchrome-eager-timeout-'));
-    const home = path.join(tmp, 'home');
-    const lockDir = path.join(tmp, 'locks');
-    const userDataDir = path.join(tmp, 'profile');
-    const slowChrome = path.join(tmp, 'slow-chrome.sh');
-    fs.mkdirSync(home, { recursive: true });
-    fs.writeFileSync(slowChrome, '#!/bin/sh\nsleep 5\n', { mode: 0o755 });
-    const cdpPort = await allocatePort();
-    let child: ChildProcessWithoutNullStreams | null = null;
-    let stderr = '';
-
-    try {
-      child = spawn(process.execPath, [
-        ENTRY,
-        'serve',
-        '--server-mode',
-        '--no-auto-elect',
-        '--port', String(cdpPort),
-        '--user-data-dir', userDataDir,
-        '--chrome-binary', slowChrome,
-      ], {
-        cwd: REPO_ROOT,
-        stdio: ['pipe', 'pipe', 'pipe'],
-        env: {
-          ...process.env,
-          HOME: home,
-          OPENCHROME_CONTROLLER_LOCK_DIR: lockDir,
-          OPENCHROME_PPID_WATCH: '0',
-          OPENCHROME_HEALTH_ENDPOINT: '0',
-          OPENCHROME_RECOVERY_LEDGER: '0',
-          CHROME_LAUNCH_TIMEOUT_MS: '300',
-        },
-      });
-      child.stderr.on('data', (chunk: Buffer) => { stderr += chunk.toString('utf8'); });
-
-      const exit = await waitForExit(child, 20_000);
-      expect(exit.code).not.toBe(0);
-      expect(stderr).toContain('Chrome debug port');
-      expect(stderr).toContain('Startup Chrome launch timed out; keeping ownership');
-      expect(stderr).not.toContain('STDIO transport enabled');
-      expect(jsonFileCount(lockDir)).toBe(0);
     } finally {
       await terminate(child);
       fs.rmSync(tmp, { recursive: true, force: true });

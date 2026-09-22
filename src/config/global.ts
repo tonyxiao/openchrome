@@ -9,38 +9,18 @@ export interface GlobalConfig extends WindowBoundsConfig {
   port: number;
   /** Auto-launch Chrome if not running (default: false) */
   autoLaunch: boolean;
-  /** Custom user data directory for Chrome (default: uses real Chrome profile on macOS, temp dir elsewhere) */
+  /** Persistent user data directory owned by the broker */
   userDataDir?: string;
-  /** Chrome profile directory name (e.g., "Profile 1", "Default"). Used with --profile-directory flag */
-  profileDirectory?: string;
-  /** Path to custom Chrome binary (e.g., chrome-headless-shell) */
+  /** Path to a custom visible Chrome binary */
   chromeBinary?: string;
-  /** Use chrome-headless-shell if available (default: false) */
-  useHeadlessShell?: boolean;
-  /** Run Chrome in headless mode. Default is headed (#657); this field is the
-   *  persisted-preference layer of the headless resolver (see src/config/headless-resolver.ts).
-   *  Resolution precedence: --headless / --visible CLI flags > OPENCHROME_HEADLESS env > this field > headed default. */
-  headless?: boolean;
-  /** If true, quit running Chrome to reuse the real profile instead of using temp profile (default: false) */
+  /** If true, quit running Chrome before launching the managed persistent profile */
   restartChrome?: boolean;
-  /** If true, restore Chrome's previous session tabs after crash (default: false).
-   *  Enable for long-running sessions where tab preservation matters. */
-  restoreLastSession?: boolean;
-  /** If true, skip cookie bridge on page creation (used in server/headless mode) */
+  /** If true, skip cookie bridge on page creation */
   skipCookieBridge?: boolean;
   /** #659 Chrome launch mode (persisted-preference layer of the launch-mode resolver).
    *  Resolution precedence: per-call options.launchMode > OPENCHROME_LAUNCH_MODE env > this field > 'auto' default. */
   chromeLaunchMode?: 'auto' | 'attach' | 'isolated';
   /** @deprecated authToken removed from GlobalConfig — token flows directly via createTransport() */
-  /** Chrome Pool settings for managing multiple Chrome instances */
-  pool?: {
-    /** Enable the Chrome pool (default: true) */
-    enabled: boolean;
-    /** Maximum number of Chrome instances in the pool (default: 5) */
-    maxInstances: number;
-    /** Base port for Chrome instances; subsequent instances use basePort+1, +2, etc. (default: 9222) */
-    basePort: number;
-  };
   /** Security settings */
   security?: {
     /** Domains to block AI agent access to. Supports glob patterns (e.g., "*.bank.com") */

@@ -6,9 +6,9 @@ import { BrowserContext } from 'puppeteer-core';
 import type { TenantId } from '../tenant/types';
 
 /**
- * Worker - An isolated browser context within a session
- * Each worker has its own cookies, localStorage, sessionStorage
- * Enables parallel browser operations from a single Claude Code session
+ * Worker - a logical tab group within a session.
+ * Workers share the broker's persistent Chrome profile unless they are the
+ * explicit incognito worker created by tabs_create({ incognito: true }).
  */
 export interface Worker {
   id: string;
@@ -17,9 +17,6 @@ export interface Worker {
   context: BrowserContext | null;  // null = use default browser context (shares Chrome profile cookies)
   createdAt: number;
   lastActivityAt: number;
-  port?: number;              // Chrome instance port (when using pool)
-  poolOrigin?: string;        // Origin used for pool allocation
-  profileDirectory?: string;  // Chrome profile directory (when using multi-profile)
 }
 
 export interface WorkerInfo {
@@ -28,17 +25,12 @@ export interface WorkerInfo {
   targetCount: number;
   createdAt: number;
   lastActivityAt: number;
-  /** Chrome profile directory when the worker is backed by a profile-scoped browser. */
-  profileDirectory?: string;
 }
 
 export interface WorkerCreateOptions {
   id?: string;
   name?: string;
-  shareCookies?: boolean;       // If true, use default browser context (shares Chrome profile cookies) instead of isolated context
   targetUrl?: string;           // URL for origin-aware Chrome instance selection
-  profileDirectory?: string;    // Chrome profile directory for multi-profile support
-  port?: number;                // Explicit Chrome port for external instances (e.g., headed fallback)
   /** Use a disposable incognito BrowserContext in the existing Chrome process. */
   incognito?: boolean;
 }

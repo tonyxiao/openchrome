@@ -57,10 +57,6 @@ const workflowInitDefinition: MCPToolDefinition = {
               type: 'string',
               description: 'Criteria for task completion',
             },
-            shareCookies: {
-              type: 'boolean',
-              description: 'Share cookies from Chrome session. Default: false',
-            },
           },
           required: ['name', 'url', 'task'],
         },
@@ -97,7 +93,6 @@ const workflowInitHandler: ToolHandler = async (
     url: string;
     task: string;
     successCriteria?: string;
-    shareCookies?: boolean;
   }>;
 
   // DNS pre-resolution: resolve all worker hostnames in parallel
@@ -127,16 +122,12 @@ const workflowInitHandler: ToolHandler = async (
       id: `wf-${Date.now()}`,
       name,
       steps: workerDefs.map((w) => {
-        if (w.shareCookies === undefined) {
-          console.error(`[Orchestration] Worker "${w.name}": shareCookies not specified, defaulting to true (shared context for faster init)`);
-        }
         return {
           workerId: `worker-${w.name}`,
           workerName: w.name,
           url: w.url,
           task: w.task,
           successCriteria: w.successCriteria || 'Task completed successfully',
-          shareCookies: w.shareCookies ?? true,  // Default to shared cookies for faster context creation
         };
       }),
       parallel: true,

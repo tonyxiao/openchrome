@@ -138,11 +138,6 @@ jest.mock('../../src/core/perception/ref-id-manager', () => ({
   })),
 }));
 
-jest.mock('../../src/chrome/pool', () => ({
-  getChromePool: jest.fn().mockReturnValue(null),
-  ChromePool: jest.fn(),
-}));
-
 // ─── Imports ───────────────────────────────────────────────────────────────
 import { SessionManager } from '../../src/session-manager';
 import { getGlobalConfig, setGlobalConfig } from '../../src/config/global';

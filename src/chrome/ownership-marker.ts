@@ -168,9 +168,7 @@ export function readMarker(filePath: string): OwnershipMarker | null {
  *   - `~/.openchrome/profile/`              — singular persistent profile from
  *     `ProfileManager.resolveProfile()` (codex P1 review on #667 — the previous
  *     scan only walked the plural `profiles/*` and missed every real launch).
- *   - `~/.openchrome/profile/<sub>/`        — multi-profile sub-dirs.
- *   - `~/.openchrome/headless-shell-profile/` — headless-shell binary profile.
- *   - `~/.openchrome/profiles/*`            — pool/multi-profile (forwards-compat).
+ *   - `~/.openchrome/profile/<sub>/`        — Chrome's Default profile sub-dir.
  *   - `~/.openchrome/state/markers/*.json`  — fallback marker store.
  *
  * Custom user-data-dirs that live outside `~/.openchrome` are NOT scanned —
@@ -185,11 +183,10 @@ export function listMarkers(): Array<{ filePath: string; marker: OwnershipMarker
   const home = os.homedir();
   const candidateDirs: string[] = [
     path.join(home, '.openchrome', 'profile'),
-    path.join(home, '.openchrome', 'headless-shell-profile'),
   ];
 
-  // `~/.openchrome/profile/<sub>` (e.g. when --profile-directory creates a
-  // Chrome multi-profile sub-folder under the persistent root).
+  // A marker may sit inside the fixed Default subdirectory under the
+  // persistent profile root.
   try {
     const profileRoot = path.join(home, '.openchrome', 'profile');
     const entries = fs.readdirSync(profileRoot, { withFileTypes: true });
@@ -203,7 +200,7 @@ export function listMarkers(): Array<{ filePath: string; marker: OwnershipMarker
     }
   }
 
-  // `~/.openchrome/profiles/*` — pool / future multi-profile (#659).
+  // Legacy managed-profile roots are still recognized for safe cleanup.
   try {
     const profilesRoot = path.join(home, '.openchrome', 'profiles');
     const entries = fs.readdirSync(profilesRoot, { withFileTypes: true });

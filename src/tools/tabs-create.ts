@@ -1,11 +1,8 @@
 /**
  * Tabs Create Tool - Create a new tab in the session with a specific URL
  *
- * #848: optional `isolatedContext` opens the new tab inside a named
- * puppeteer-core BrowserContext. Cookies, localStorage, sessionStorage,
- * and HTTP cache are isolated per name; the same Chrome process serves
- * all named contexts. When omitted, behaviour is byte-identical to
- * v1.11.0.
+ * Tabs use the shared persistent profile unless the caller explicitly asks
+ * for an in-process incognito context.
  */
 
 import { MCPServer } from '../mcp-server';
@@ -16,15 +13,6 @@ import { safeTitle } from '../core/page/safe-title';
 import { assertDomainAllowed, DomainPolicyError } from '../security/domain-guard';
 import { wrapMutatingHandler } from '../core/perception/snapshot-cache-helper';
 import { autoRecallForUrl } from '../core/skill-memory/auto-recall';
-import {
-  DEFAULT_CONTEXT_NAME,
-  InvalidContextNameError,
-  assertValidContextName,
-} from '../chrome/contexts';
-import {
-  isSingleBrowserProcessMode,
-  secondaryChromePolicyError,
-} from '../config/browser-process-policy';
 
 const definition: MCPToolDefinition = {
   name: 'tabs_create',
@@ -40,20 +28,9 @@ const definition: MCPToolDefinition = {
         type: 'string',
         description: 'Worker ID for parallel ops. Default: default',
       },
-      profileDirectory: {
-        type: 'string',
-        description: 'Chrome profile directory name. Disabled when the broker enforces one visible persistent-profile Chrome process.',
-      },
       recall: {
         type: 'boolean',
         description: 'Override OPENCHROME_AUTO_RECALL for this call. true forces domain skill injection; false suppresses it even when the flag is on.',
-      },
-      isolatedContext: {
-        type: 'string',
-        description:
-          'Optional BrowserContext name (#848). Named contexts share one Chrome ' +
-          'process but isolate cookies/storage/cache. Created on first use, reused ' +
-          'later. Names match [A-Za-z0-9_-]{1,64}; "default" is reserved.',
       },
       incognito: {
         type: 'boolean',
@@ -71,31 +48,17 @@ const handler: ToolHandler = async (
 ): Promise<MCPResult> => {
   const sessionManager = getSessionManager();
   const url = args.url as string;
-  const profileDirectory = args.profileDirectory as string | undefined;
   const recallArg = args.recall as boolean | undefined;
-  const isolatedContext = args.isolatedContext as string | undefined;
   const incognito = args.incognito === true;
-  if (profileDirectory && isSingleBrowserProcessMode()) {
+  if (incognito && args.workerId) {
     return {
-      content: [{ type: 'text', text: secondaryChromePolicyError('profileDirectory') }],
-      isError: true,
-    };
-  }
-  if (args.workerId && profileDirectory) {
-    return {
-      content: [{ type: 'text', text: 'Error: workerId and profileDirectory cannot be used together. Use profileDirectory alone (a worker is auto-created per profile).' }],
-      isError: true,
-    };
-  }
-  if (incognito && (args.workerId || profileDirectory || isolatedContext)) {
-    return {
-      content: [{ type: 'text', text: 'Error: incognito cannot be combined with workerId, profileDirectory, or isolatedContext.' }],
+      content: [{ type: 'text', text: 'Error: incognito cannot be combined with workerId.' }],
       isError: true,
     };
   }
   const workerId = incognito
     ? `incognito:${sessionId}`
-    : (args.workerId as string | undefined) || (profileDirectory ? `profile:${profileDirectory}` : undefined);
+    : (args.workerId as string | undefined);
 
   // URL is required
   if (!url) {
@@ -108,20 +71,6 @@ const handler: ToolHandler = async (
       ],
       isError: true,
     };
-  }
-
-  // Validate isolatedContext name (#848). Reserved name `default` is
-  // accepted explicitly: it maps to the no-op default-context path.
-  if (isolatedContext !== undefined && isolatedContext !== DEFAULT_CONTEXT_NAME) {
-    try {
-      assertValidContextName(isolatedContext);
-    } catch (err) {
-      const msg = err instanceof InvalidContextNameError ? err.message : String(err);
-      return {
-        content: [{ type: 'text', text: `Error: ${msg}` }],
-        isError: true,
-      };
-    }
   }
 
   // Domain policy check before creating the tab
@@ -151,8 +100,6 @@ const handler: ToolHandler = async (
       sessionId,
       url,
       workerId,
-      profileDirectory,
-      isolatedContext,
       incognito,
     );
     const { targetId, page, workerId: assignedWorkerId, contextName, isolated } = result;

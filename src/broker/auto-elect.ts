@@ -92,7 +92,7 @@ export function shouldClientAutoConnect(params: {
  * The default broker HTTP port for an auto-elected owner on a given CDP port.
  *
  * Deterministic (`cdpPort + 200`, e.g. 9222 → 9422) so it is predictable and
- * clear of the headed-fallback offset (`+100`). Operators can still override via
+ * clear of adjacent debugging services. Operators can still override via
  * `--http`/`OPENCHROME_HTTP_PORT`; clients never rely on this value directly —
  * they read the actual endpoint from the published broker metadata.
  */

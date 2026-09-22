@@ -324,7 +324,7 @@ Dispatch is based on file extension (`.yaml`/`.yml` → YAML parser; `.json` →
 
 ## Server reuse (`--reuse`)
 
-Without `--reuse`, the runner spawns its own `openchrome serve --server-mode` child process for the duration of the playbook and terminates it on completion.
+Without `--reuse`, the runner spawns its own `openchrome serve` child process for the duration of the playbook and terminates it on completion.
 
 For `oc playbook run`, `--reuse` currently falls through to one-shot spawn with a stderr warning until the legacy runner transport is replaced.
 

@@ -1923,23 +1923,6 @@ export class CDPClient {
 
     console.error(`[CDPClient] Stealth tab created: ${targetId} (about:blank), will navigate to ${url}`);
 
-    // Warn if headless — anti-bot detection is nearly guaranteed in headless mode
-    {
-      const { headless } = getGlobalConfig();
-      let isHeadless = !!headless;
-      if (!isHeadless) {
-        try {
-          const version = await browser.version();
-          isHeadless = version.toLowerCase().includes('headless');
-        } catch {
-          // Version check failed — continue
-        }
-      }
-      if (isHeadless) {
-        console.error('[CDPClient] WARNING: Stealth mode in headless Chrome is unlikely to bypass anti-bot systems. Use headed Chrome (--visible) for anti-bot pages.');
-      }
-    }
-
     // Step 2: Attach CDP immediately (about:blank has no anti-bot to detect it)
     try {
       await cdp.send('Target.attachToTarget', { targetId, flatten: true });

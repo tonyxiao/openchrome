@@ -210,7 +210,7 @@ suiteRunner('Cross-Env: Cursor IDE Verification (Issue #509)', () => {
         'console_capture', 'performance_metrics', 'file_upload',
         'batch_execute', 'batch_paginate', 'javascript_tool', 'page_reload',
         'cookies', 'storage', 'fill_form', 'inspect', 'memory', 'oc_query',
-        'oc_checkpoint', 'list_profiles',
+        'oc_checkpoint',
         'oc_recording_start', 'oc_recording_stop', 'oc_recording_status', 'oc_recording_list', 'oc_recording_export',
       ];
       for (const tool of expectedTier2) {
@@ -289,7 +289,6 @@ suiteRunner('Cross-Env: Cursor IDE Verification (Issue #509)', () => {
       'javascript_tool', 'tabs_context', 'tabs_create', 'tabs_close',
       'cookies', 'storage', 'wait_for', 'memory', 'lightweight_scroll',
       'oc_stop', 'oc_reap_orphans', 'oc_profile_status', 'oc_session_snapshot', 'oc_session_resume', 'oc_journal',
-      'oc_get_connection_info', 'oc_copy_to_clipboard', 'oc_open_host_settings',
       'act',
     ];
     tier1Tools.forEach(tool => {
@@ -328,7 +327,7 @@ suiteRunner('Cross-Env: Cursor IDE Verification (Issue #509)', () => {
 
     // Untiered (defaults to Tier 1)
     // These tools are registered with oc_ prefix but mapped in tool-tiers as non-prefixed
-    const diagnosticTools = ['oc_connection_health', 'oc_checkpoint', 'list_profiles'];
+    const diagnosticTools = ['oc_connection_health', 'oc_checkpoint'];
     diagnosticTools.forEach(tool => {
       test(`Diagnostic/Tier1: ${tool} registered`, () => {
         expect(allToolNames).toContain(tool);

@@ -71,7 +71,7 @@ export class StdioMcpClient {
 
     // Resolve the serve entry — from dist/cli/playbook/ go up three levels to root.
     const serveEntry = path.join(__dirname, '..', '..', '..', 'dist', 'index.js');
-    const invocation = resolveServeInvocation(serveEntry, ['--server-mode']);
+    const invocation = resolveServeInvocation(serveEntry);
 
     this.child = spawn(invocation.command, invocation.args, {
       stdio: ['pipe', 'pipe', 'pipe'],

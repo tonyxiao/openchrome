@@ -2,15 +2,13 @@
  * Profile Status Tool - Check browser profile type and capabilities
  *
  * Provides visibility into whether OpenChrome is running with the user's
- * real Chrome profile, a persistent OpenChrome profile, or a temporary profile,
- * and what capabilities are available in each mode.
+ * persistent profile and its capabilities.
  */
 
 import { MCPServer } from '../mcp-server';
 import { MCPToolDefinition, MCPResult, ToolHandler } from '../types/mcp';
 import { TOOL_ANNOTATIONS } from '../types/tool-annotations';
 import { getChromeLauncher } from '../chrome/launcher';
-import { getChromePool } from '../chrome/pool';
 import { getGlobalConfig } from '../config/global';
 import { formatAge } from '../utils/format-age';
 import { getSessionManager } from '../session-manager';
@@ -58,19 +56,12 @@ const handler: ToolHandler = async (
         cookieAge: Date.now() - state.cookieCopiedAt,
         cookieAgeFormatted: formatAge(state.cookieCopiedAt),
       }),
-      ...(state.profileDirectory && {
-        profileDirectory: state.profileDirectory,
-      }),
     };
 
     const lines: string[] = [];
-    const profileDirectory = state.profileDirectory;
     if (state.type === 'real') {
       lines.push('Profile: Real Chrome profile (full capability)');
       lines.push('All browser features available: extensions, saved passwords, localStorage, bookmarks, form autofill.');
-      if (profileDirectory && profileDirectory !== 'Default') {
-        lines.push(`Profile directory: ${profileDirectory}`);
-      }
     } else if (state.type === 'persistent') {
       lines.push('Profile: Persistent OpenChrome profile (synced cookies from real profile)');
       if (state.cookieCopiedAt) {
@@ -80,37 +71,11 @@ const handler: ToolHandler = async (
       lines.push('Not available: extensions, saved passwords, bookmarks, form autofill');
       lines.push('');
       lines.push('Tip: Cookies are synced from the real profile. If authentication fails, a fresh sync will happen on next launch.');
-    } else if (state.type === 'temp') {
-      lines.push('Profile: Fresh temporary profile (no user data)');
-      lines.push('Not available: cookies, extensions, saved passwords, localStorage, bookmarks, form autofill');
-      lines.push('');
-      lines.push('Tip: The user will need to log in manually to any sites that require authentication.');
     } else if (state.type === 'explicit') {
       lines.push('Profile: User-specified custom profile directory');
       lines.push('Capabilities depend on the profile contents.');
-      if (profileDirectory && profileDirectory !== 'Default') {
-        lines.push(`Profile directory: ${profileDirectory}`);
-      }
     } else {
       lines.push('Profile: Unknown (Chrome may not be launched yet)');
-    }
-
-    // Append multi-profile pool info if multiple instances are running
-    const pool = getChromePool();
-    const instances = pool.getInstances();
-    const profileInstances = Array.from(instances.values()).filter(i => i.profileDirectory);
-    if (profileInstances.length > 0) {
-      const activeProfiles = profileInstances.map(i => ({
-        profileDirectory: i.profileDirectory,
-        port: i.port,
-        tabCount: i.tabCount,
-      }));
-      result.activeProfiles = activeProfiles;
-      lines.push('');
-      lines.push(`Active profile instances (${profileInstances.length}):`);
-      for (const p of profileInstances) {
-        lines.push(`  "${p.profileDirectory}" — port ${p.port}, ${p.tabCount} tab(s)`);
-      }
     }
 
     return {

@@ -1,6 +1,6 @@
 {
   "name": "openchrome-mcp",
-  "version": "1.13.0-native-viewport.7",
+  "version": "1.13.0-native-viewport.9",
   "description": "Open-source browser automation MCP server. Control your real Chrome from any AI agent.",
   "main": "dist/index.js",
   "exports": {

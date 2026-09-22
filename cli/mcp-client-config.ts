@@ -1,7 +1,7 @@
 export type SupportedMCPClient = 'claude' | 'codex' | 'opencode';
 export type SetupScope = 'user' | 'project';
 
-export type TopologyPreset = 'auto-elect' | 'single-owner' | 'broker-owner' | 'broker-client' | 'isolated' | 'ci-headless' | 'dev-profile';
+export type TopologyPreset = 'auto-elect' | 'single-owner' | 'broker-owner' | 'broker-client';
 
 export const HOST_CONFIG_MIGRATION_NOTE = 'Package updates do not rewrite existing MCP host registrations; rerun setup or edit host config, then restart the host to activate topology changes.';
 
@@ -10,7 +10,6 @@ export interface ServeArgOptions {
   dashboard?: boolean;
   port?: string | number;
   userDataDir?: string;
-  profileDirectory?: string;
   launchMode?: string;
   topology?: TopologyPreset;
   autoElect?: boolean;
@@ -83,10 +82,6 @@ export function getServeArgs(options: ServeArgOptions = {}): string[] {
     serveArgs.push('--user-data-dir', resolved.userDataDir);
   }
 
-  if (resolved.profileDirectory) {
-    serveArgs.push('--profile-directory', resolved.profileDirectory);
-  }
-
   if (resolved.launchMode) {
     serveArgs.push('--launch-mode', resolved.launchMode);
   }
@@ -118,27 +113,13 @@ export function resolveTopologyOptions(options: ServeArgOptions = {}): ServeArgO
       next.autoLaunch ??= true;
       if (next.autoLaunch !== false) next.autoElect ??= true;
       break;
-    case 'isolated':
-      next.port ??= 9223;
-      next.userDataDir ??= '~/.openchrome/profiles/isolated';
-      next.launchMode ??= 'isolated';
-      break;
-    case 'ci-headless':
-      next.port ??= 9224;
-      next.userDataDir ??= '~/.openchrome/profiles/ci';
-      next.launchMode ??= 'isolated';
-      break;
-    case 'dev-profile':
-      next.port ??= 9225;
-      next.userDataDir ??= '~/.openchrome/profiles/dev';
-      break;
   }
   return next;
 }
 
 export function getTopologyWarning(options: ServeArgOptions = {}): string | null {
   if (options.topology !== 'single-owner') return null;
-  return `Topology note: --topology single-owner generates the legacy direct-owner config. Do not install the same direct config in multiple MCP clients at once; prefer the default auto-elect topology, choose --topology isolated, explicit --port + --user-data-dir, or the broker topology for shared profiles. ${HOST_CONFIG_MIGRATION_NOTE}`;
+  return `Topology note: --topology single-owner generates the legacy direct-owner config. Do not install the same direct config in multiple MCP clients at once; prefer the default auto-elect or broker topology. ${HOST_CONFIG_MIGRATION_NOTE}`;
 }
 
 export function getCodexServerConfig(options: ServeArgOptions = {}): MCPServerConfig {

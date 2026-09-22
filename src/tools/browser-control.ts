@@ -3,7 +3,6 @@ import type { MCPResult, MCPToolDefinition } from '../types/mcp';
 import { getSessionManager } from '../session-manager';
 import { getRefIdManager } from '../core/perception/ref-id-manager';
 import { markFrameDirty } from '../core/perception/snapshot-cache-helper';
-import { getGlobalConfig } from '../config/global';
 import { TOOL_ANNOTATIONS } from '../types/tool-annotations';
 
 const definition: MCPToolDefinition = {
@@ -19,7 +18,7 @@ const definition: MCPToolDefinition = {
       expectedUrl: { type: 'string', description: 'Exact URL required for verify/resume. Query and fragment are compared but not echoed.' },
       selector: { type: 'string', description: 'Optional CSS selector that must resolve to a visible element in the current page.' },
       expectedText: { type: 'string', description: 'Optional exact trimmed text of the selected account/status element.' },
-      reveal: { type: 'boolean', description: 'Explicitly bring a visible browser tab forward after input has drained. Headless requires an operator-controlled restart instead.' },
+      reveal: { type: 'boolean', description: 'Explicitly bring the managed browser tab forward after input has drained.' },
     },
     required: ['action', 'tabId'],
   },
@@ -73,13 +72,12 @@ export function registerBrowserControlTool(server: MCPServer): void {
       }
       const state = operations.status(sessionId, tabId);
       let revealed = false;
-      if (args.reveal === true && action === 'pause' && state.phase === 'human' && !getGlobalConfig().headless) {
+      if (args.reveal === true && action === 'pause' && state.phase === 'human') {
         await page.bringToFront();
         revealed = true;
       }
       const url = new URL(page.url());
       return json({ sessionId, tabId, url: url.origin === 'null' ? `${url.protocol}${url.pathname}` : `${url.origin}${url.pathname}`, ...state, revealed,
-        ...(args.reveal === true && getGlobalConfig().headless ? { visibilityRecovery: 'Headless cannot reveal this window. Keep the lease paused; use a deliberately configured visible browser and revalidate state.' } : {}),
         ...(action === 'verify' || action === 'resume' ? { conditionPassed: verified, authentication: 'unverified', verificationSource: 'caller_supplied_page_condition' } : {}),
       });
     } catch {

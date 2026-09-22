@@ -12,7 +12,7 @@ import { getSessionManager } from '../session-manager';
 const definition: MCPToolDefinition = {
   name: 'worker',
   description:
-    'Manage workers. Actions: "create" (isolated context), "list" (show all), "delete" (remove and close tabs).',
+    'Manage logical tab groups in this agent session. All workers share the persistent browser profile.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -61,7 +61,7 @@ async function handleCreate(
           {
             workerId: worker.id,
             name: worker.name,
-            message: `Worker "${worker.name}" created with isolated browser context. Use workerId "${worker.id}" with other tools to operate in this worker.`,
+            message: `Worker "${worker.name}" created. Use workerId "${worker.id}" with other tools to operate in this shared-profile tab group.`,
             createdAt: worker.createdAt,
           },
           null,

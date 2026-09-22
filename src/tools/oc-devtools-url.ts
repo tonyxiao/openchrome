@@ -15,7 +15,6 @@ import { MCPServer } from '../mcp-server';
 import { MCPToolDefinition, MCPResult, ToolHandler } from '../types/mcp';
 import { TOOL_ANNOTATIONS } from '../types/tool-annotations';
 import { getSessionManager } from '../session-manager';
-import { getChromePool } from '../chrome/pool';
 import { fetchJsonList } from '../chrome/devtools-info';
 import { getGlobalConfig } from '../config/global';
 
@@ -53,8 +52,7 @@ type ResolvePortResult =
 
 /**
  * Resolve the Chrome port for a given CDP targetId.
- * Walks pool instances: for each, fetch /json/list and check if the target appears there.
- * Falls back to the default port when pool is empty.
+ * Checks the broker's one Chrome port.
  *
  * Returns:
  *   { port }               — target found on this port
@@ -62,23 +60,13 @@ type ResolvePortResult =
  *   { error: 'chrome_unreachable' } — all ports failed to respond
  */
 async function resolvePortForTarget(targetId: string): Promise<ResolvePortResult> {
-  const pool = getChromePool();
-  const poolInstances = pool.getInstances();
-  const ports: number[] =
-    poolInstances.size > 0
-      ? Array.from(poolInstances.values()).map((inst) => inst.port)
-      : [getGlobalConfig().port];
-
-  let anyReachable = false;
-  for (const port of ports) {
-    const pages = await fetchJsonList(port);
-    if (pages === null) continue; // this port is unreachable
-    anyReachable = true;
-    if (pages.some((p) => p.id === targetId)) {
-      return { port };
-    }
+  const port = getGlobalConfig().port;
+  const pages = await fetchJsonList(port);
+  if (pages === null) return { error: 'chrome_unreachable' };
+  if (pages.some((p) => p.id === targetId)) {
+    return { port };
   }
-  return anyReachable ? { error: 'not_found' } : { error: 'chrome_unreachable' };
+  return { error: 'not_found' };
 }
 
 /**

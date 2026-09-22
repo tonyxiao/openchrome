@@ -12,7 +12,6 @@ const VALID_SCOPES: ReadonlySet<Scope> = new Set<Scope>([
   'read',
   'write',
   'admin',
-  'headless-only',
 ]);
 
 export interface JwtConfig {

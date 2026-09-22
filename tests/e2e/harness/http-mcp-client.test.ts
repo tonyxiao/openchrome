@@ -125,7 +125,6 @@ describe('HttpMCPClient lifecycle', () => {
       'serve',
       '--http', '31001',
       '--http-host', '127.0.0.1',
-      '--server-mode',
       '--port', '35001',
       '--user-data-dir', '/tmp/openchrome-http-test',
     ]);

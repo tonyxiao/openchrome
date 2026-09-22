@@ -7,14 +7,14 @@ import { codegenPath, defaultCodegenRoot, listCodegenFiles, replayCommandFor, ty
 
 const definition: MCPToolDefinition = {
   name: 'oc_skill_export',
-  description: 'Export an opt-in codegen replay artifact written by --codegen. Returns the path and byte count for puppeteer, playwright, or mcp-replay output. Default OpenChrome behavior is unchanged when --codegen is off.',
+  description: 'Export an opt-in MCP replay artifact written by --codegen mcp-replay.',
   annotations: TOOL_ANNOTATIONS.oc_skill_export,
   inputSchema: {
     type: 'object',
     properties: {
       skill_id: { type: 'string', description: 'Skill id or session id hint. For codegen artifacts this is matched against file names.' },
       session_id: { type: 'string', description: 'Exact MCP session id to export. Defaults to current session.' },
-      format: { type: 'string', enum: ['puppeteer', 'playwright', 'mcp-replay'], description: 'REQUIRED Export format.' },
+      format: { type: 'string', enum: ['mcp-replay'], description: 'REQUIRED Export format.' },
     },
     required: ['format'],
   },
@@ -22,16 +22,15 @@ const definition: MCPToolDefinition = {
 
 const handler: ToolHandler = async (sessionId, args): Promise<MCPResult> => {
   const format = args.format as Exclude<CodegenMode, 'off'> | undefined;
-  if (format !== 'puppeteer' && format !== 'playwright' && format !== 'mcp-replay') {
-    return { isError: true, content: [{ type: 'text', text: 'oc_skill_export: format must be puppeteer, playwright, or mcp-replay' }] };
+  if (format !== 'mcp-replay') {
+    return { isError: true, content: [{ type: 'text', text: 'oc_skill_export: format must be mcp-replay' }] };
   }
   const sid = typeof args.session_id === 'string' ? args.session_id : sessionId;
   let file = codegenPath(sid, format);
   const files = listCodegenFiles(defaultCodegenRoot());
   if (!files.includes(file)) {
     const hint = typeof args.skill_id === 'string' ? args.skill_id : sid;
-    const ext = format === 'mcp-replay' ? '.jsonl' : '.ts';
-    const found = files.filter((f) => path.basename(f).includes(hint) && f.includes(`.${format}.`) && f.endsWith(ext)).pop();
+    const found = files.filter((f) => path.basename(f).includes(hint) && f.includes(`.${format}.`) && f.endsWith('.jsonl')).pop();
     if (found) file = found;
   }
   try {

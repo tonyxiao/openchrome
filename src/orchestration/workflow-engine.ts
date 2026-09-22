@@ -19,7 +19,6 @@ export interface WorkflowStep {
   url: string;
   task: string;
   successCriteria: string;
-  shareCookies?: boolean;
 }
 
 export interface WorkflowDefinition {
@@ -184,7 +183,6 @@ export class WorkflowEngine {
         const worker = await this.sessionManager.createWorker(sessionId, {
           id: step.workerId,
           name: step.workerName,
-          shareCookies: step.shareCookies,
           targetUrl: step.url,
         });
         return { worker, step };

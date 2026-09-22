@@ -38,7 +38,6 @@ import { formatError } from '../utils/format-error';
 import { getCDPConnectionPool } from '../cdp/connection-pool';
 import { getCDPClient, ConnectionEvent } from '../cdp/client';
 import { getChromeLauncher } from '../chrome/launcher';
-import { getChromePool } from '../chrome/pool';
 import { ToolManifest, ToolEntry, ToolCategory } from '../types/tool-manifest';
 import { DEFAULT_TOOL_EXECUTION_TIMEOUT_MS, DEFAULT_SESSION_INIT_TIMEOUT_MS, DEFAULT_SESSION_INIT_TIMEOUT_AUTO_LAUNCH_MS, DEFAULT_RECONNECT_TIMEOUT_MS, DEFAULT_OPERATION_GATE_TIMEOUT_MS, DEFAULT_HEARTBEAT_IDLE_TIMEOUT_MS, DEFAULT_RATE_LIMIT_RPM } from '../config/defaults';
 import { createBudget, isLegacyBudgetMode } from '../core/deadline/budget';
@@ -3253,10 +3252,6 @@ export class MCPServer {
           parts.push(`Available: synced cookies${state.cookieCopiedAt ? ` (${formatAge(state.cookieCopiedAt)})` : ''} — authentication may work`);
           parts.push('Not available: extensions, saved passwords, bookmarks');
           parts.push('Tip: If authentication fails, the cookie sync may be stale. Ask the user to close Chrome.');
-        } else {
-          parts.push('⚠️ Browser running with fresh temporary profile (no user data).');
-          parts.push('Not available: cookies, extensions, saved passwords, localStorage, bookmarks');
-          parts.push('Tip: The user will need to log in manually to any sites that require authentication.');
         }
         warning = parts.join('\n');
         this.profileWarningShown = true;
@@ -3313,17 +3308,7 @@ export class MCPServer {
       this.transport = null;
     }
 
-    // Scale timeout based on number of Chrome pool instances.
-    // Each launcher.close() needs up to 5s for SIGTERM->SIGKILL escalation,
-    // plus time for session/CDP cleanup before that.
-    let poolInstanceCount = 0;
-    try {
-      const pool = getChromePool();
-      poolInstanceCount = pool.getInstances().size;
-    } catch { /* pool may not be initialized */ }
-
-    // Base 5s for session/CDP cleanup + 6s per Chrome instance (5s kill + 1s buffer)
-    const timeoutMs = Math.max(5000, 5000 + poolInstanceCount * 6000);
+    const timeoutMs = 5000;
 
     let cleanupTimeout: ReturnType<typeof setTimeout> | null = null;
     await Promise.race([

@@ -44,7 +44,7 @@ export class StdioRunClient {
     }
 
     const serveEntry = path.join(__dirname, '..', 'index.js');
-    const invocation = resolveServeInvocation(serveEntry, ['--server-mode']);
+    const invocation = resolveServeInvocation(serveEntry);
     this.child = spawn(invocation.command, invocation.args, {
       stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env, OPENCHROME_PPID_WATCH: '0' },

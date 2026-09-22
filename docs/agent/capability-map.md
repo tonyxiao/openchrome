@@ -2,7 +2,7 @@
 
 > Generated from `src/tools/index.ts`. Do not edit by hand; run `npm run docs:capability-map`.
 
-Total tools: 121
+Total tools: 117
 
 ## core
 
@@ -35,14 +35,12 @@ Total tools: 121
 - `oc_connection_health` — Get CDP connection health metrics including heartbeat mode, reconnect count, ping latency, connection state, and live reconnection progress.
 - `oc_context_export` — Export the active tab's auth-relevant state (cookies + local/sessionStorage + optional UA/viewport/HTTP-auth) as a portable plaintext envelope.
 - `oc_context_import` — Strict-replace import of a `ContextEnvelope` produced by `oc_context_export`.
-- `oc_copy_to_clipboard` — Copy text to the system clipboard.
 - `oc_devtools_url` — Get the Chrome DevTools inspector URL for the current worker's active page.
 - `oc_diff` — Compare two evidence-bundle IDs or paths and return deterministic DOM, screenshot phash, URL, console, and network diff facts.
 - `oc_doctor_report` — Read the most recent openchrome doctor diagnostic report from cache.
 - `oc_evidence_bundle` — Capture a snapshot of the current page state (DOM, screenshot, network slice, console, perceptual hash) and write it to a bundle directory.
 - `oc_evidence_get` — Retrieve a durable oc_assert evidence artifact by handle.
 - `oc_gate_inspect` — Detect whether the current tab is gated (CAPTCHA, bot-check, SSO redirect, paywall, 2FA prompt).
-- `oc_get_connection_info` — Get connection configuration for a web AI host (Claude Web, ChatGPT, Gemini, or custom).
 - `oc_journal` — Query the tool call journal.
 - `oc_journal_compact` — Compress a sliding window of journal entries into a compact model-friendly summary.
 - `oc_lane_close` — Close a task-scoped browser lane and its lane-owned targets without closing unrelated task tabs.
@@ -51,7 +49,6 @@ Total tools: 121
 - `oc_lane_list` — List task-scoped browser lanes for a task.
 - `oc_normalize_action` — Validate and normalize a near-valid browser/computer action payload without executing it.
 - `oc_observe` — Deterministic, numbered list of actionable elements on the page.
-- `oc_open_host_settings` — Open the MCP connector settings page for a web AI host in the default browser.
 - `oc_output_fetch` — Redeem an output handle returned by a large-output tool (read_page, crawl, network, extract_data, oc_evidence_bundle).
 - `oc_performance_analyze` — Drill into one named insight from a trace captured by oc_performance_insights.
 - `oc_performance_insights` — Capture a CDP performance trace and return named insights (LCPBreakdown, DocumentLatency, RenderBlocking, CLSCulprits, LongTasks, ThirdParties).
@@ -66,7 +63,7 @@ Total tools: 121
 - `oc_run_status` — Return the current status and summary for an opt-in OpenChrome run ledger.
 - `oc_session_resume` — Restore working context after context compaction.
 - `oc_session_snapshot` — Save browser state snapshot for context recovery after compaction.
-- `oc_skill_export` — Export an opt-in codegen replay artifact written by --codegen.
+- `oc_skill_export` — Export an opt-in MCP replay artifact written by --codegen mcp-replay.
 - `oc_skill_recall` — Retrieve skills from the JSON skill memory store for a given domain.
 - `oc_skill_record` — Record a skill (domain, name, steps, contract_id) into the JSON skill memory store.
 - `oc_stop` — Shut down OpenChrome and close Chrome.
@@ -101,7 +98,7 @@ Total tools: 121
 - `validate_page` — Composite health check: navigate, wait, capture console errors, return structured summary (title, errors, interactive count, body sample).
 - `vision_find` — Find elements using vision-based screenshot analysis.
 - `wait_for` — Wait for a condition.
-- `worker` — Manage workers.
+- `worker` — Manage logical tab groups in this agent session.
 
 ## crawl
 
@@ -117,7 +114,6 @@ Total tools: 121
 
 ## profile
 
-- `list_profiles` — List available Chrome profiles with names and directory IDs.
 - `oc_profile_status` — Check browser profile type and capabilities.
 
 ## recording

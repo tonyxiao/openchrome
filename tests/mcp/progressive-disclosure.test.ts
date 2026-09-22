@@ -135,7 +135,7 @@ describe('MCP progressive disclosure client detection', () => {
 
     expect(init.result?.capabilities?.tools?.listChanged).toBe(false);
     expect(tools).not.toContain('expand_tools');
-    expect(tools.length).toBeGreaterThanOrEqual(118);
+    expect(tools.length).toBeGreaterThanOrEqual(117);
     expect(tools).toContain('tabs_activate');
   });
 });

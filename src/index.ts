@@ -8,14 +8,10 @@
  */
 
 import { Command } from 'commander';
-import * as os from 'os';
-import * as path from 'path';
 import { getMCPServer, setMCPServerOptions } from './mcp-server';
 import { registerAllTools } from './tools';
 import { createTransport } from './transports/index';
 import { getGlobalConfig, setGlobalConfig } from './config/global';
-import { resolveHeadlessMode } from './config/headless-resolver';
-import { assertSingleBrowserProcessIsHeaded } from './config/browser-process-policy';
 import { resolveCapabilityFilterOptions } from './config/capability-filter';
 import { resolveWindowBoundsConfig } from './config/window-bounds';
 import { ToolTier } from './config/tool-tiers';
@@ -91,9 +87,8 @@ program
   .description('MCP server for parallel Claude Code browser sessions')
   .version(getVersion());
 
-function resolveControllerLockUserDataDir(userDataDir: string | undefined, useHeadlessShell: boolean): string {
+function resolveControllerLockUserDataDir(userDataDir: string | undefined): string {
   if (userDataDir) return userDataDir;
-  if (useHeadlessShell) return path.join(os.homedir(), '.openchrome', 'headless-shell-profile');
   return ProfileManager.PERSISTENT_PROFILE_DIR;
 }
 
@@ -104,16 +99,12 @@ program
   .option('--auto-launch', 'Auto-launch Chrome if not running (default: false)')
   .option('--allow-unsafe-shared-attach', 'Debug escape hatch: allow a second direct controller for the same Chrome port/profile')
   .option('--user-data-dir <dir>', 'Chrome user data directory (default: real Chrome profile on macOS)')
-  .option('--profile-directory <name>', 'Chrome profile directory name (e.g., "Profile 1", "Default")')
-  .option('--chrome-binary <path>', 'Path to Chrome binary (e.g., chrome-headless-shell)')
-  .option('--headless-shell', 'Use chrome-headless-shell if available (default: false)')
-  .option('--headless', 'Run Chrome headless (default: headed). Also: OPENCHROME_HEADLESS=1 env var.')
-  .option('--visible', '[deprecated] Show Chrome window. Headed is the default since #657; this flag is now a no-op alias and will be removed in a future release.')
+  .option('--chrome-binary <path>', 'Path to the visible Chrome binary')
   .option('--window-size <width,height>', 'Headed Chrome window size, e.g. 1280,900. Also: OPENCHROME_WINDOW_SIZE.')
   .option('--window-position <x,y>', 'Headed Chrome window position, e.g. 0,0. Also: OPENCHROME_WINDOW_POSITION.')
   .option('--window-bounds <x,y,width,height>', 'Headed Chrome window bounds. Overrides size/position. Also: OPENCHROME_WINDOW_BOUNDS.')
   .option('--start-maximized', 'Start headed Chrome maximized when no explicit size, position, or bounds are set. Also: OPENCHROME_START_MAXIMIZED=1.')
-  .option('--restart-chrome', 'Quit running Chrome to reuse real profile (default: uses temp profile)')
+  .option('--restart-chrome', 'Quit a running Chrome before launching the managed persistent profile')
   .option('--hybrid', 'Enable hybrid mode (Lightpanda + Chrome routing)')
   .option('--lp-port <port>', 'Lightpanda debugging port (default: 9223)', '9223')
   .option('--blocked-domains <domains>', 'Comma-separated list of blocked domains (e.g., "*.bank.com,mail.google.com")')
@@ -122,7 +113,6 @@ program
   .option('--no-sanitize-content', 'Disable content sanitization for prompt injection defense (default: enabled)')
   .option('--all-tools', 'Expose all tools from startup (bypass progressive disclosure)')
   .option('--minimal', 'Expose only the minimal browser-essential startup tool surface. Advanced tools remain available through expand_tools.')
-  .option('--server-mode', 'Server/headless mode: auto-launch headless Chrome, skip cookie bridge')
   .option('--http [port]', 'Use Streamable HTTP transport instead of stdio (default port: 3100)')
   .option('--http-host <host>', 'Bind address for HTTP transport (default: 127.0.0.1, use 0.0.0.0 for external access)')
   .option('--auth-token <token>', 'Bearer token for HTTP transport authentication (also: OPENCHROME_AUTH_TOKEN env var)')
@@ -141,8 +131,8 @@ program
   .option('--auto-connect [userDataDir]', 'Attach to a Chrome you started yourself by reading <userDataDir>/DevToolsActivePort (#849). When omitted, uses the platform-default Chrome user-data dir. Also: OPENCHROME_AUTO_CONNECT=<dir> env var. Implies --launch-mode=attach.')
   .option('--launch-mode <mode>', 'Chrome launch mode: auto | attach | isolated (#659). Also: OPENCHROME_LAUNCH_MODE env var.')
   .option('--secrets <path>', 'Load a dotenv-format secrets file (KEY=value per line). Tokens "${SECRET:NAME}" in tool arguments are substituted to the real value at MCP request deserialization; the same values are redacted from every LLM-visible artifact (responses, trace, skill records, journal). Default: no secrets loaded. P3: no OS keychain integration.')
-  .option('--codegen <mode>', 'Opt-in replay artifact generation: off, puppeteer, playwright, or mcp-replay. Default: off (no response shape changes). Also: OPENCHROME_CODEGEN.')
-  .action(async (options: { port: string; autoLaunch?: boolean; allowUnsafeSharedAttach?: boolean; userDataDir?: string; profileDirectory?: string; chromeBinary?: string; headlessShell?: boolean; headless?: boolean; visible?: boolean; windowSize?: string; windowPosition?: string; windowBounds?: string; startMaximized?: boolean; restartChrome?: boolean; hybrid?: boolean; lpPort?: string; blockedDomains?: string; auditLog?: boolean; sanitizeContent?: boolean; allTools?: boolean; minimal?: boolean; serverMode?: boolean; http?: string | boolean; authToken?: string; transport?: string; broker?: boolean; connectBroker?: boolean; autoElect?: boolean; idleTimeout?: string; allowUnauthenticatedHttp?: boolean; pilot?: boolean; slim?: boolean; toolsOnly?: string; disableTools?: string; introspectToolsList?: boolean; autoConnect?: string | boolean; launchMode?: string; secrets?: string; codegen?: string }) => {
+  .option('--codegen <mode>', 'Opt-in MCP replay artifact generation: off or mcp-replay. Default: off. Also: OPENCHROME_CODEGEN.')
+  .action(async (options: { port: string; autoLaunch?: boolean; allowUnsafeSharedAttach?: boolean; userDataDir?: string; chromeBinary?: string; windowSize?: string; windowPosition?: string; windowBounds?: string; startMaximized?: boolean; restartChrome?: boolean; hybrid?: boolean; lpPort?: string; blockedDomains?: string; auditLog?: boolean; sanitizeContent?: boolean; allTools?: boolean; minimal?: boolean; http?: string | boolean; authToken?: string; transport?: string; broker?: boolean; connectBroker?: boolean; autoElect?: boolean; idleTimeout?: string; allowUnauthenticatedHttp?: boolean; pilot?: boolean; slim?: boolean; toolsOnly?: string; disableTools?: string; introspectToolsList?: boolean; autoConnect?: string | boolean; launchMode?: string; secrets?: string; codegen?: string }) => {
     const { normalizeCodegenMode, setCodegenMode } = await import('./core/codegen');
     const codegenMode = normalizeCodegenMode(options.codegen ?? process.env.OPENCHROME_CODEGEN);
     setCodegenMode(codegenMode);
@@ -258,21 +248,8 @@ program
       }
     }
 
-    // Server mode forces headless + auto-launch + no cookie bridge
-    if (options.serverMode) {
-      autoLaunch = true;
-      if (options.visible) {
-        console.error('[openchrome] Warning: --visible ignored in server mode (headless forced)');
-      }
-      // Force headless via the resolver-visible flag, not visible=false (which now means "user did not pass --visible").
-      options.visible = false;
-      options.headless = true;
-      console.error('[openchrome] Server mode: enabled (headless, no cookie bridge)');
-    }
     const userDataDir = options.userDataDir || process.env.CHROME_USER_DATA_DIR || undefined;
-    const profileDirectory = options.profileDirectory || process.env.CHROME_PROFILE_DIRECTORY || undefined;
     const chromeBinary = options.chromeBinary || process.env.CHROME_BINARY || undefined;
-    const useHeadlessShell = options.headlessShell || false;
     const restartChrome = options.restartChrome || false;
 
     // #1359 broker foundation: --broker and --connect-broker are mutually
@@ -289,8 +266,6 @@ program
     // still take precedence inside the decision helper.
     const autoElect = isAutoElectEnabled({
       autoElect: options.autoElect,
-      // Keep the default flip scoped to direct `serve --auto-launch`; server-mode
-      // can still opt in with --auto-elect / OPENCHROME_AUTO_ELECT=1.
       autoLaunch: options.autoLaunch === true,
       broker: options.broker,
       connectBroker: options.connectBroker,
@@ -329,9 +304,9 @@ program
       // Ordinary stdio hosts and broker owners defer Chrome until browser
       // demand. Standalone daemon transports keep the historical /ready
       // contract that Chrome is available before traffic is admitted.
-      eagerStartup: Boolean(options.serverMode) || (useHttp && !brokerOwner),
+      eagerStartup: useHttp && !brokerOwner,
     });
-    const lockUserDataDir = resolveControllerLockUserDataDir(userDataDir, useHeadlessShell);
+    const lockUserDataDir = resolveControllerLockUserDataDir(userDataDir);
 
     // #1359 P3a: the broker is the single CDP owner for a (port, userDataDir).
     // Refuse to publish broker metadata when this process did not take Chrome
@@ -469,43 +444,9 @@ program
     if (userDataDir) {
       console.error(`[openchrome] User data dir: ${userDataDir}`);
     }
-    if (profileDirectory) {
-      console.error(`[openchrome] Profile directory: ${profileDirectory}`);
-    }
     if (chromeBinary) {
       console.error(`[openchrome] Chrome binary: ${chromeBinary}`);
     }
-    if (useHeadlessShell) {
-      console.error(`[openchrome] Using headless-shell mode`);
-    }
-
-    // Resolve headed-vs-headless intent (#657). Default flipped to headed.
-    // The resolver throws HeadlessFlagConflictError if --headless and --visible both set.
-    //
-    // We resolve unconditionally (not gated on autoLaunch) so any *implicit*
-    // relaunch path — process watchdog (#347/#649) or pool warm-up that
-    // flips autoLaunch on later — picks up the user's actual intent from
-    // global config rather than the headed default. (qodo P1 review on #665.)
-    let headless: boolean;
-    try {
-      const mode = resolveHeadlessMode(
-        { headless: options.headless, visible: options.visible },
-        { OPENCHROME_HEADLESS: process.env.OPENCHROME_HEADLESS },
-        { headless: getGlobalConfig().headless },
-      );
-      headless = mode === 'headless';
-      assertSingleBrowserProcessIsHeaded(headless);
-    } catch (err) {
-      console.error(`[openchrome] ${(err as Error).message}`);
-      process.exit(2);
-    }
-    if (autoLaunch) {
-      console.error(`[openchrome] Headless mode: ${headless}`);
-      if (options.visible === true && options.headless !== true) {
-        console.error('[openchrome] Note: --visible is deprecated; headed is the default since #657.');
-      }
-    }
-
     let windowConfig;
     try {
       windowConfig = resolveWindowBoundsConfig(
@@ -532,10 +473,7 @@ program
       port,
       autoLaunch,
       userDataDir,
-      profileDirectory,
       chromeBinary,
-      useHeadlessShell,
-      headless,
       restartChrome,
       // #659/#849: persist resolved launch mode so the launcher's per-call
       // resolver picks it up (CLI > env > config > default).
@@ -545,9 +483,6 @@ program
     if (restartChrome) {
       console.error(`[openchrome] Restart Chrome mode: enabled (will quit existing Chrome)`);
     }
-
-    // Server mode: cookie bridge remains active for normal page creation.
-    // Pool pre-warming passes skipCookieBridge per-call to avoid CDP conflicts.
 
     // Configure hybrid mode if enabled
     const hybrid = options.hybrid || false;
@@ -751,18 +686,6 @@ program
         }
       } catch { /* launcher may not be initialized */ }
 
-      // Also kill any pool Chrome instances (skipping attach-mode entries).
-      try {
-        const { getChromePool } = require('./chrome/pool');
-        const pool = getChromePool();
-        for (const [, instance] of pool.getInstances()) {
-          if (instance.launcher.getInstance?.()?.launchMode === 'attach') continue;
-          const pid = instance.launcher.getChromePid();
-          if (pid) {
-            killChromeTree(pid);
-          }
-        }
-      } catch { /* pool may not be initialized */ }
     });
 
     // Register signal handlers for graceful shutdown
@@ -1193,7 +1116,7 @@ program
         sessions: { active: sessionManager?.sessionCount ?? 0 },
         tenants: { activeContexts: sessionManager?.tenantContextCount ?? 0 },
         listeners: getListenerErrorStats(),
-        controllerTopology: getCurrentControllerTopology({ port, userDataDir: resolveControllerLockUserDataDir(userDataDir, useHeadlessShell) }),
+        controllerTopology: getCurrentControllerTopology({ port, userDataDir: resolveControllerLockUserDataDir(userDataDir) }),
       };
       return data;
     }, healthPort, healthBind) : null;

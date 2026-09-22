@@ -33,18 +33,3 @@ export function findChromePath(): string | null {
   }
   return null;
 }
-
-export function findChromeHeadlessShell(): string | null {
-  const envPath = process.env['CHROME_HEADLESS_SHELL'];
-  if (envPath && fs.existsSync(envPath)) return envPath;
-
-  const platform = os.platform();
-  try {
-    const cmd = platform === 'win32' ? 'where chrome-headless-shell' : 'which chrome-headless-shell';
-    const result = execSync(cmd, { encoding: 'utf8' }).trim();
-    if (result && fs.existsSync(result)) return result;
-  } catch {
-    // Not found in PATH.
-  }
-  return null;
-}

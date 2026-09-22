@@ -548,7 +548,7 @@ describe('NavigateTool', () => {
       expect(parsed.authRedirectKind).toBe('same-site-login');
       expect(parsed.redirectedFrom).toBe('https://app.test/protected');
       expect(parsed.authRedirectUrl).toBe('https://app.test/login');
-      expect(parsed.recommendedNextAction).toContain('headed: true');
+      expect(parsed.recommendedNextAction).toContain('existing visible persistent-profile browser window');
       expect(parsed.message).toContain('Same-site login redirect detected');
     });
 

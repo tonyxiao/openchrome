@@ -46,9 +46,6 @@ jest.mock('../../src/config/global', () => ({
   setGlobalConfig: jest.fn(),
 }));
 
-jest.mock('../../src/config/headless-resolver', () => ({
-  resolveHeadlessMode: jest.fn(() => 'headed'),
-}));
 
 jest.mock('../../src/config/window-bounds', () => ({
   resolveWindowBoundsConfig: jest.fn(() => ({})),
@@ -80,11 +77,6 @@ jest.mock('../../src/session-manager', () => ({
     getSessions: jest.fn(() => []),
   })),
   _resetSessionManagerForTesting: jest.fn(),
-}));
-
-jest.mock('../../src/chrome/pool', () => ({
-  getChromePool: jest.fn(() => ({ getInstances: () => new Map() })),
-  resetChromePool: jest.fn(),
 }));
 
 jest.mock('../../src/cdp/client', () => ({

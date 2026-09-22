@@ -13,7 +13,7 @@ jest.mock('../../src/chrome/launcher', () => ({
 }));
 
 jest.mock('../../src/config/global', () => ({
-  getGlobalConfig: jest.fn().mockReturnValue({ port: 9222, autoLaunch: false, headless: false, skipCookieBridge: true }),
+  getGlobalConfig: jest.fn().mockReturnValue({ port: 9222, autoLaunch: false, skipCookieBridge: true }),
 }));
 
 jest.mock('../../src/stealth/fingerprint-defense', () => ({

@@ -32,9 +32,7 @@ jest.mock('child_process', () => {
 
 jest.mock('../../src/config/global', () => ({
   getGlobalConfig: () => ({
-    headless: false,
     chromeBinary: undefined,
-    useHeadlessShell: false,
     userDataDir: undefined,
     restartChrome: false,
   }),
@@ -329,33 +327,6 @@ describe('ChromeLauncher launch timeout fix (issue #171)', () => {
       await expect(
         launcher.ensureChrome({ autoLaunch: true })
       ).rejects.toThrow(/Exit code: 1|exited with code 1/);
-    }, 15000);
-  });
-
-  describe('macOS CI headless launch', () => {
-    it('uses the mock keychain for a managed profile', async () => {
-      const fakeChrome = await startDelayedFakeChromeServer(5_000);
-      try {
-        Object.defineProperty(process, 'platform', { value: 'darwin' });
-        process.env.CI = 'true';
-        process.env.OPENCHROME_LAUNCH_MODE = 'isolated';
-        process.env.CHROME_LAUNCH_TIMEOUT_MS = '1';
-
-        const proc = createMockProcess();
-        mockSpawn.mockReturnValue(proc as any);
-
-        const launcher = new ChromeLauncher(fakeChrome.port);
-        await expect(launcher.ensureChrome({
-          autoLaunch: true,
-          headless: true,
-          userDataDir: '/tmp/openchrome-macos-ci-profile',
-        })).rejects.toThrow(/not available after/);
-
-        const args = mockSpawn.mock.calls[0][1] as string[];
-        expect(args).toContain('--use-mock-keychain');
-      } finally {
-        await fakeChrome.close();
-      }
     }, 15000);
   });
 

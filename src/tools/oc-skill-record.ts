@@ -37,7 +37,6 @@ import {
 } from '../core/skill-memory';
 import {
   codegenPath,
-  getCodegenMode,
   isCodegenEnabled,
   type CodegenMode,
 } from '../core/codegen';
@@ -225,10 +224,7 @@ const handler: ToolHandler = async (
   const codegenArtifacts: CodegenArtifactPointer[] = [];
   if (isCodegenEnabled()) {
     const storeRoot = defaultSkillMemoryRootDir();
-    const codegenMode = getCodegenMode();
     const formats: Array<Exclude<CodegenMode, 'off'>> = ['mcp-replay'];
-    if (codegenMode === 'puppeteer') formats.push('puppeteer');
-    if (codegenMode === 'playwright') formats.push('playwright');
     const { statSync, existsSync } = await import('node:fs');
     for (const fmt of formats) {
       const artifactPath = codegenPath(sessionId, fmt);

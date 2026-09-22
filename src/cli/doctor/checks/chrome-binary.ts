@@ -1,7 +1,7 @@
 /**
  * Check: chrome-binary
  * Locates Chrome and verifies it reports a supported major version.
- * Uses findChromePath() and findChromeHeadlessShell() from the launcher module.
+ * Locates the visible Chrome binary used by the broker.
  */
 
 import * as fs from 'fs';
@@ -61,23 +61,6 @@ function findChromePath(): string | null {
   return null;
 }
 
-function findChromeHeadlessShell(): string | null {
-  const envPath = process.env['CHROME_HEADLESS_SHELL'];
-  if (envPath && fs.existsSync(envPath)) return envPath;
-
-  const platform = os.platform();
-  try {
-    const cmd = platform === 'win32' ? 'where chrome-headless-shell' : 'which chrome-headless-shell';
-    const result = execSync(cmd, { encoding: 'utf8' }).trim();
-    if (result && fs.existsSync(result)) return result;
-  } catch {
-    // Not found in PATH
-  }
-
-  return null;
-}
-
-
 function displayPath(filePath: string): string {
   const homes = [os.homedir()];
   try {
@@ -111,7 +94,7 @@ function probeChromeVersion(chromePath: string): { major: number; raw: string } 
 }
 
 export const checkChromeBinary: CheckFn = async () => {
-  const candidatePath = findChromePath() ?? findChromeHeadlessShell();
+  const candidatePath = findChromePath();
 
   if (!candidatePath) {
     return {

@@ -91,7 +91,7 @@ function commandEnablesAutoElect(command?: string[]): boolean {
   if (!command) return false;
   if (command.includes('--no-auto-elect')) return false;
   if (command.includes('--auto-elect')) return true;
-  return command.includes('serve') && command.includes('--auto-launch') && !command.includes('--server-mode');
+  return command.includes('serve') && command.includes('--auto-launch');
 }
 
 export function collectDoctorDiagnostics(): DoctorDiagnostics {

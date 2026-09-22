@@ -100,21 +100,6 @@ describe('oc_profile_status tool', () => {
     expect(result.content[1].text).toContain('Persistent OpenChrome profile');
   });
 
-  test('reports temp profile', async () => {
-    mockGetProfileState.mockReturnValue({
-      type: 'temp',
-      extensionsAvailable: false,
-      userDataDir: '/tmp/openchrome-456',
-    });
-    const result = await handler('default', {});
-    const data = JSON.parse(result.content[0].text);
-    expect(data.profileType).toBe('temp');
-    expect(data.capabilities.extensions).toBe(false);
-    expect(data.capabilities.sessionCookies).toBe(false);
-    expect(result.content[1].text).toContain('Fresh temporary profile');
-    expect(result.content[1].text).toContain('log in manually');
-  });
-
   test('handles launcher not initialized gracefully', async () => {
     mockGetProfileState.mockImplementation(() => {
       throw new Error('Chrome not launched');

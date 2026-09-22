@@ -25,7 +25,7 @@ describe('clearChromeSessionRestoreState', () => {
       preserved: true,
     }));
 
-    expect(clearChromeSessionRestoreState(userDataDir, 'Default').sort()).toEqual(['Last Tabs', 'Sessions']);
+    expect(clearChromeSessionRestoreState(userDataDir).sort()).toEqual(['Last Tabs', 'Sessions']);
     expect(fs.existsSync(path.join(profileDir, 'Sessions'))).toBe(false);
     expect(fs.existsSync(path.join(profileDir, 'Last Tabs'))).toBe(false);
     expect(fs.readFileSync(path.join(profileDir, 'Cookies'), 'utf8')).toBe('keep');
@@ -35,7 +35,4 @@ describe('clearChromeSessionRestoreState', () => {
     });
   });
 
-  test('rejects a profile directory outside the user-data-dir', () => {
-    expect(() => clearChromeSessionRestoreState(userDataDir, '../outside')).toThrow('escapes user-data-dir');
-  });
 });

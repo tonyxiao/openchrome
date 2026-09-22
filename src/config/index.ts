@@ -5,7 +5,7 @@
 export * from './global';
 
 /**
- * Storage state configuration for headless session persistence
+ * Storage state configuration for managed session persistence
  */
 export interface StorageStateConfig {
   /** Enable storage state persistence (default: false) */

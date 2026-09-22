@@ -29,7 +29,7 @@ export interface SessionResumeToken {
   chromePid: number;
   /** Chrome remote debugging port. */
   port: number;
-  /** Optional profile-directory string (purely informational for the resume tool). */
+  /** Optional persistent profile root (purely informational for the resume tool). */
   profileDir?: string;
   /** Epoch ms after which the token is invalid. */
   ttlEpochMs: number;

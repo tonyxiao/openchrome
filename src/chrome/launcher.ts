@@ -9,10 +9,10 @@ import * as os from 'os';
 import { getGlobalConfig } from '../config/global';
 import { writeChromePid, removeChromePid, getChromePidFilePath, killProcessTree } from './pid-manager';
 import { spawnProcessGuardian } from './process-guardian';
-import { DEFAULT_VIEWPORT, DEFAULT_CHROME_LAUNCH_TIMEOUT_MS, DEFAULT_RESTORE_LAST_SESSION } from '../config/defaults';
+import { DEFAULT_CHROME_LAUNCH_TIMEOUT_MS } from '../config/defaults';
 import type { WindowBoundsConfig } from '../config/window-bounds';
 import { getHeadedWindowArgs } from './launcher-window-args';
-import { findChromeHeadlessShell, findChromePath } from './launcher-chrome-paths';
+import { findChromePath } from './launcher-chrome-paths';
 import { checkDebugPort, DebugPortTimeoutError, waitForDebugPort } from './launcher-debug-port';
 import { ProfileManager } from './profile-manager';
 import type { ProfileType } from './profile-manager';
@@ -29,7 +29,6 @@ import {
   LaunchMode as ResolvedLaunchMode,
 } from './launch-mode-resolver';
 import { detectRunningChromes, filterByProfile, pickPreferredChrome } from './process-detector';
-import { isSingleBrowserProcessMode } from '../config/browser-process-policy';
 import { clearChromeSessionRestoreState } from './session-restore-policy';
 export type { ProfileType } from './profile-manager';
 
@@ -65,18 +64,10 @@ export interface ChromeInstance {
 export interface LaunchOptions {
   port?: number;
   userDataDir?: string;
-  headless?: boolean;
   /** If false, don't auto-launch Chrome when not running (default: false) */
   autoLaunch?: boolean;
-  /** If true, force using a temp directory instead of real Chrome profile */
-  useTempProfile?: boolean;
-  /** If true, quit running Chrome to reuse the real profile (default: false — uses temp profile instead) */
+  /** If true, quit running Chrome before launching the managed profile */
   restartChrome?: boolean;
-  /** Chrome profile directory name (e.g., "Profile 1"). Passed as --profile-directory flag */
-  profileDirectory?: string;
-  /** If true, restore Chrome's previous session tabs after crash (default: false).
-   *  Enable for long-running sessions where tab preservation matters. */
-  restoreLastSession?: boolean;
   /** #659 launch-mode override (per-call). One of: 'auto' | 'attach' | 'isolated'.
    *  Highest precedence; falls back to OPENCHROME_LAUNCH_MODE then config then 'auto'. */
   launchMode?: 'auto' | 'attach' | 'isolated';
@@ -99,12 +90,11 @@ export { DebugPortTimeoutError, waitForDebugPort } from './launcher-debug-port';
 
 
 export interface ProfileState {
-  type: ProfileType;             // from profile-manager: 'real' | 'persistent' | 'temp' | 'explicit'
+  type: ProfileType;             // from profile-manager: 'real' | 'persistent' | 'explicit'
   cookieCopiedAt?: number;       // timestamp when cookies were copied (undefined for real profile)
   extensionsAvailable: boolean;
   sourceProfile?: string;        // path to the real profile (if synced from)
   userDataDir?: string;          // actual userDataDir being used
-  profileDirectory?: string;     // Chrome profile directory name (e.g., "Profile 1", "Default")
 }
 
 async function refreshKnownAutoConnectWsEndpoint(port: number): Promise<string | null> {
@@ -253,7 +243,7 @@ export class ChromeLauncher {
       try {
         const candidates = filterByProfile(
           detectRunningChromes(),
-          options.profileDirectory,
+          'Default',
         );
         const chosen = pickPreferredChrome(candidates);
         if (chosen) {
@@ -375,10 +365,9 @@ export class ChromeLauncher {
       );
     }
 
-    // Graceful restart: only when explicitly opted in via --restart-chrome flag.
-    // Default behavior: skip restart, fall through to temp profile + cookie copy.
+    // Graceful restart is only used when explicitly requested.
     const restartChrome = options.restartChrome ?? getGlobalConfig().restartChrome ?? false;
-    if (!options.useTempProfile && restartChrome) {
+    if (restartChrome) {
       const realProfileDir = this.getRealChromeProfileDir();
       if (realProfileDir && this.isProfileLocked(realProfileDir) && this.isChromeRunning()) {
         console.error('[ChromeLauncher] --restart-chrome: attempting graceful restart...');
@@ -386,7 +375,7 @@ export class ChromeLauncher {
         if (unlocked) {
           console.error('[ChromeLauncher] Chrome quit successfully, profile unlocked. Relaunching with debug port...');
         } else {
-          console.error('[ChromeLauncher] Graceful restart failed, falling back to temp profile...');
+          console.error('[ChromeLauncher] Graceful restart failed; managed profile launch will continue normally.');
         }
       }
     }
@@ -396,22 +385,12 @@ export class ChromeLauncher {
 
     const globalConfig = getGlobalConfig();
 
-    // Resolve Chrome binary: explicit override > headless-shell > standard Chrome
+    // Resolve the visible Chrome binary.
     let chromePath: string | null = null;
-    let usingHeadlessShell = false;
 
     if (globalConfig.chromeBinary) {
       chromePath = globalConfig.chromeBinary;
       console.error(`[ChromeLauncher] Using custom Chrome binary: ${chromePath}`);
-    } else if (globalConfig.useHeadlessShell) {
-      chromePath = findChromeHeadlessShell();
-      if (chromePath) {
-        usingHeadlessShell = true;
-        console.error(`[ChromeLauncher] Using chrome-headless-shell: ${chromePath}`);
-      } else {
-        console.error('[ChromeLauncher] chrome-headless-shell not found, falling back to standard Chrome');
-        chromePath = findChromePath();
-      }
     } else {
       chromePath = findChromePath();
     }
@@ -422,15 +401,14 @@ export class ChromeLauncher {
       );
     }
 
-    // Resolve which profile directory to use via ProfileManager.
-    // Priority: explicit > temp/headless > real unlocked > persistent (with sync) > persistent (no sync)
+    // Resolve the one persistent profile owned by this broker.
     const realProfileDir = this.getRealChromeProfileDir();
     const explicitUserDataDir = options.userDataDir || globalConfig.userDataDir;
     // Skip expensive isProfileLocked check when result won't be used:
-    // explicit dir, temp profile, headless-shell, or no real profile.
+    // explicit dir or no real profile.
     // Note: isAutoLaunch routes to persistent profile regardless of lock state,
     // but the lock check is still useful for cookie sync decisions in resolveProfile.
-    const isLocked = (!explicitUserDataDir && !options.useTempProfile && !usingHeadlessShell && realProfileDir)
+    const isLocked = (!explicitUserDataDir && realProfileDir)
       ? this.isProfileLocked(realProfileDir)
       : false;
 
@@ -438,8 +416,6 @@ export class ChromeLauncher {
       realProfileDir,
       isProfileLocked: isLocked,
       explicitUserDataDir,
-      useTempProfile: options.useTempProfile,
-      usingHeadlessShell,
       isAutoLaunch: true,  // Chrome 136+: force non-default --user-data-dir
     });
 
@@ -453,14 +429,11 @@ export class ChromeLauncher {
     // Non-fatal: a stale lock is better than a failed launch.
     if (profileType === 'persistent') {
       try {
-        const profileSubdir = options.profileDirectory || globalConfig.profileDirectory || 'Default';
-        this.profileManager.cleanStaleLocks(userDataDir, profileSubdir);
+        this.profileManager.cleanStaleLocks(userDataDir, 'Default');
       } catch (err) {
         console.error('[ChromeLauncher] cleanStaleLocks failed (non-fatal):', err);
       }
     }
-
-    const profileDirectory = options.profileDirectory || globalConfig.profileDirectory;
 
     // Track profile state for MCP consumers
     this.profileState = {
@@ -469,7 +442,6 @@ export class ChromeLauncher {
       ...(resolution.syncPerformed && { cookieCopiedAt: Date.now() }),
       ...(realProfileDir && profileType === 'persistent' && { sourceProfile: realProfileDir }),
       userDataDir,
-      ...(profileDirectory && { profileDirectory }),
     };
 
     if (resolution.syncPerformed) {
@@ -478,10 +450,6 @@ export class ChromeLauncher {
       console.error(`[ChromeLauncher] Using persistent profile (cookies fresh): ${userDataDir}`);
     } else if (profileType === 'real') {
       console.error(`[ChromeLauncher] Using real Chrome profile: ${userDataDir}`);
-    } else if (profileType === 'temp') {
-      console.error(`[ChromeLauncher] Using temp profile: ${userDataDir}`);
-    } else if (profileType === 'headless-shell') {
-      console.error(`[ChromeLauncher] Using stable headless-shell profile: ${userDataDir}`);
     } else {
       console.error(`[ChromeLauncher] Using explicit profile: ${userDataDir}`);
     }
@@ -493,59 +461,33 @@ export class ChromeLauncher {
       `--user-data-dir=${userDataDir}`,
     ];
 
-    if (profileDirectory) {
-      args.push(`--profile-directory=${profileDirectory}`);
-      console.error(`[ChromeLauncher] Using profile directory: ${profileDirectory}`);
+    args.push('--profile-directory=Default');
+
+    const removed = clearChromeSessionRestoreState(
+      userDataDir,
+    );
+    if (removed.length > 0) {
+      console.error(`[ChromeLauncher] Cleared stale Chrome window restore state: ${removed.join(', ')}`);
     }
 
-    // Tab restoration: opt-in for long sessions (#347 Phase 2A.3)
-    const restoreSession = options.restoreLastSession
-      ?? (process.env.OPENCHROME_RESTORE_LAST_SESSION !== undefined
-          ? process.env.OPENCHROME_RESTORE_LAST_SESSION === 'true'
-          : undefined)
-      ?? globalConfig.restoreLastSession
-      ?? DEFAULT_RESTORE_LAST_SESSION;
-
-    if (isSingleBrowserProcessMode()) {
-      const removed = clearChromeSessionRestoreState(
-        userDataDir,
-        profileDirectory || 'Default',
-      );
-      if (removed.length > 0) {
-        console.error(`[ChromeLauncher] Cleared stale Chrome window restore state: ${removed.join(', ')}`);
-      }
-    }
-
-    // Headless mode: explicit option > global config (default when auto-launch)
-    const headless = options.headless ?? globalConfig.headless ?? false;
-
-    // Essential flags — required for all modes
+    // This runtime has one mode: visible Chrome with no previous-window restore.
     args.push(
       '--no-first-run',
       '--no-default-browser-check',
-      restoreSession && !isSingleBrowserProcessMode() ? '--restore-last-session' : '--no-restore-last-session',
+      '--no-restore-last-session',
     );
-
-    if (headless) {
-      // Preserve the previous headless argument shape; headed window placement is handled below.
-      args.push('--start-maximized', `--window-size=${DEFAULT_VIEWPORT.width},${DEFAULT_VIEWPORT.height}`);
-    } else {
-      args.push(...getHeadedWindowArgs({
-        windowSize: options.windowSize ?? globalConfig.windowSize,
-        windowPosition: options.windowPosition ?? globalConfig.windowPosition,
-        windowBounds: options.windowBounds ?? globalConfig.windowBounds,
-        startMaximized: options.startMaximized ?? globalConfig.startMaximized,
-      }));
-    }
+    args.push(...getHeadedWindowArgs({
+      windowSize: options.windowSize ?? globalConfig.windowSize,
+      windowPosition: options.windowPosition ?? globalConfig.windowPosition,
+      windowBounds: options.windowBounds ?? globalConfig.windowBounds,
+      startMaximized: options.startMaximized ?? globalConfig.startMaximized,
+    }));
 
     // Prevent Blink from setting navigator.webdriver = true when CDP is connected.
     // Without this, anti-automation systems (e.g., Cloudflare Turnstile) detect the
     // browser as automated and refuse to function — even for manual human interaction.
     // This is an official Chrome flag, not a stealth hack. (#247)
-    // Skipped for chrome-headless-shell which may not support this flag.
-    if (!usingHeadlessShell) {
-      args.push('--disable-blink-features=AutomationControlled');
-    }
+    args.push('--disable-blink-features=AutomationControlled');
 
     // Stability flags — suppress crash UI that blocks automation in long sessions (#347).
     // Applied only to managed profiles; real profiles retain stock Chrome behavior
@@ -568,19 +510,6 @@ export class ChromeLauncher {
     //   --renderer-process-limit=N       (non-standard, reveals automation)
     //   --js-flags=--max-old-space-size  (non-standard V8 config)
     //   --disable-crash-reporter         (automation fingerprint signal)
-
-    if (headless) {
-      args.push('--headless=new', '--disable-gpu', '--disable-dev-shm-usage');
-      console.error('[ChromeLauncher] Running in headless mode (no visible window)');
-    }
-
-    // A fresh Chrome for Testing profile can block on macOS Keychain setup in
-    // non-interactive CI, leaving the process alive without opening its CDP port.
-    // Keep this test-only credential store away from user-owned real profiles.
-    if (process.platform === 'darwin' && process.env.CI && headless && profileType !== 'real') {
-      args.push('--use-mock-keychain');
-      console.error('[ChromeLauncher] macOS CI detected: using mock keychain for headless managed Chrome');
-    }
 
     // CI/Docker environments require --no-sandbox (Chrome won't start otherwise)
     if (process.env.CI || process.env.DOCKER) {
@@ -889,17 +818,6 @@ export class ChromeLauncher {
           resolve();
         }
       });
-
-      // Clean up user data dir — only delete temp profiles.
-      // Persistent profiles survive across sessions; real/explicit profiles are never ours to delete.
-      if (userDataDir && profileType === 'temp') {
-        try {
-          fs.rmSync(userDataDir, { recursive: true, force: true });
-          console.error(`[ChromeLauncher] Cleaned up temp profile: ${userDataDir}`);
-        } catch {
-          // Ignore cleanup errors
-        }
-      }
 
       // Remove ownership marker (#661 Phase 1).
       if (chromePidForMarker) {

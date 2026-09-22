@@ -194,11 +194,10 @@ program
   .option('--auto-launch', 'Auto-launch Chrome if not running (default: true)')
   .option('--port <port>', 'Chrome remote debugging port for generated serve args')
   .option('--user-data-dir <dir>', 'Chrome user data directory for generated serve args')
-  .option('--profile-directory <name>', 'Chrome profile directory name for generated serve args')
   .option('--launch-mode <mode>', 'Chrome launch mode: auto, attach, or isolated')
-  .option('--topology <preset>', 'Topology preset: auto-elect (default), single-owner, broker-owner, broker-client, isolated, ci-headless, or dev-profile')
+  .option('--topology <preset>', 'Topology preset: auto-elect (default), single-owner, broker-owner, or broker-client')
   .option('-s, --scope <scope>', 'Installation scope: "user" (global, default) or "project" (current project only)', 'user')
-  .action(async (options: { client?: string; dashboard?: boolean; autoLaunch?: boolean; port?: string; userDataDir?: string; profileDirectory?: string; launchMode?: string; topology?: string; scope?: string }) => {
+  .action(async (options: { client?: string; dashboard?: boolean; autoLaunch?: boolean; port?: string; userDataDir?: string; launchMode?: string; topology?: string; scope?: string }) => {
     const requestedClient = options.client || 'claude';
     if (!isSupportedMCPClient(requestedClient)) {
       console.error(`❌ Invalid client. Use one of: ${getSupportedMCPClients().join(', ')}`);
@@ -220,9 +219,8 @@ program
       dashboard: options.dashboard,
       port: options.port,
       userDataDir: options.userDataDir,
-      profileDirectory: options.profileDirectory,
       launchMode: options.launchMode,
-      topology: options.topology as undefined | 'auto-elect' | 'single-owner' | 'broker-owner' | 'broker-client' | 'isolated' | 'ci-headless' | 'dev-profile',
+      topology: options.topology as undefined | 'auto-elect' | 'single-owner' | 'broker-owner' | 'broker-client',
     };
     const topologyWarning = getTopologyWarning(serveArgOptions);
     if (topologyWarning) {
@@ -388,10 +386,9 @@ program
   .option('--auto-launch', 'Auto-launch Chrome if not running (default: true)')
   .option('--port <port>', 'Chrome remote debugging port for generated serve args')
   .option('--user-data-dir <dir>', 'Chrome user data directory for generated serve args')
-  .option('--profile-directory <name>', 'Chrome profile directory name for generated serve args')
   .option('--launch-mode <mode>', 'Chrome launch mode: auto, attach, or isolated')
-  .option('--topology <preset>', 'Topology preset: auto-elect (default), single-owner, broker-owner, broker-client, isolated, ci-headless, or dev-profile')
-  .action((options: { client: string; dashboard?: boolean; autoLaunch?: boolean; port?: string; userDataDir?: string; profileDirectory?: string; launchMode?: string; topology?: string }) => {
+  .option('--topology <preset>', 'Topology preset: auto-elect (default), single-owner, broker-owner, or broker-client')
+  .action((options: { client: string; dashboard?: boolean; autoLaunch?: boolean; port?: string; userDataDir?: string; launchMode?: string; topology?: string }) => {
     if (!isSupportedMCPClient(options.client)) {
       console.error(`❌ Invalid client. Use one of: ${getSupportedMCPClients().join(', ')}`);
       process.exit(1);
@@ -402,9 +399,8 @@ program
       dashboard: options.dashboard,
       port: options.port,
       userDataDir: options.userDataDir,
-      profileDirectory: options.profileDirectory,
       launchMode: options.launchMode,
-      topology: options.topology as undefined | 'auto-elect' | 'single-owner' | 'broker-owner' | 'broker-client' | 'isolated' | 'ci-headless' | 'dev-profile',
+      topology: options.topology as undefined | 'auto-elect' | 'single-owner' | 'broker-owner' | 'broker-client',
     };
     const topologyWarning = getTopologyWarning(serveArgOptions);
     if (topologyWarning) {
@@ -448,22 +444,18 @@ program
   .option('-p, --port <port>', 'Chrome remote debugging port', '9222')
   .option('--auto-launch', 'Auto-launch Chrome if not running (default: false)')
   .option('--user-data-dir <dir>', 'Chrome user data directory (default: real Chrome profile on macOS)')
-  .option('--profile-directory <name>', 'Chrome profile directory name (e.g., "Profile 1", "Default")')
-  .option('--chrome-binary <path>', 'Path to Chrome binary (e.g., chrome-headless-shell)')
-  .option('--headless-shell', 'Use chrome-headless-shell if available (default: false)')
-  .option('--visible', '[deprecated] Show Chrome window. Headed is the default since #657; this flag is now a no-op alias and will be removed in a future release.')
+  .option('--chrome-binary <path>', 'Path to a visible Chrome binary')
   .option('--window-size <width,height>', 'Headed Chrome window size, e.g. 1280,900')
   .option('--window-position <x,y>', 'Headed Chrome window position, e.g. 0,0')
   .option('--window-bounds <x,y,width,height>', 'Headed Chrome window bounds. Overrides size/position')
   .option('--start-maximized', 'Start headed Chrome maximized when no explicit window bounds, size, or position are set')
-  .option('--restart-chrome', 'Quit running Chrome to reuse real profile (default: uses temp profile)')
+  .option('--restart-chrome', 'Quit running Chrome before launching the managed persistent profile')
   .option('--hybrid', 'Enable hybrid mode (Lightpanda + Chrome routing)')
   .option('--lp-port <port>', 'Lightpanda debugging port (default: 9223)', '9223')
   .option('--blocked-domains <domains>', 'Comma-separated list of blocked domains (e.g., "*.bank.com,mail.google.com")')
   .option('--audit-log', 'Enable security audit logging (default: false)')
   .option('--no-sanitize-content', 'Disable content sanitization for prompt injection defense (default: enabled)')
   .option('--all-tools', 'Expose all tools from startup (bypass progressive disclosure)')
-  .option('--server-mode', 'Server/headless mode: auto-launch headless Chrome, skip cookie bridge')
   .option('--http [port]', 'Use Streamable HTTP transport instead of stdio (default port: 3100)')
   .option('--pilot', 'Enable experimental pilot tier. Off by default; loads src/pilot/ modules when set')
   .option('--dashboard', 'Enable terminal dashboard for real-time monitoring')

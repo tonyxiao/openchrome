@@ -25,9 +25,7 @@ jest.mock('child_process', () => {
 // Mock config
 jest.mock('../../src/config/global', () => ({
   getGlobalConfig: () => ({
-    headless: false,
     chromeBinary: undefined,
-    useHeadlessShell: false,
     userDataDir: undefined,
     restartChrome: false,
   }),

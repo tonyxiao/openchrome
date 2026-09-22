@@ -7,7 +7,6 @@ const cdpDisconnect = jest.fn();
 const addTargetDestroyedListener = jest.fn();
 const addConnectionListener = jest.fn();
 const launcherClose = jest.fn();
-const shutdownHeadedFallback = jest.fn();
 
 jest.mock('../../src/session-manager', () => ({
   getSessionManager: () => ({ cleanupAllSessions, getAllSessionInfos }),
@@ -42,10 +41,6 @@ jest.mock('../../src/chrome/launcher', () => ({
     isConnected: () => true,
     close: launcherClose,
   }),
-}));
-
-jest.mock('../../src/chrome/headed-fallback', () => ({
-  shutdownHeadedFallback,
 }));
 
 import { MCPServer } from '../../src/mcp-server';
@@ -86,7 +81,6 @@ describe('oc_stop dryRun (#878)', () => {
           sessions: 2,
           tabs: 3,
           keepChrome: true,
-          headedFallback: true,
           connectionPool: true,
           cdpClient: true,
           chromeProcess: false,
@@ -96,7 +90,6 @@ describe('oc_stop dryRun (#878)', () => {
     });
     expect(text.wouldAffect.count).toBe(2);
     expect(cleanupAllSessions).not.toHaveBeenCalled();
-    expect(shutdownHeadedFallback).not.toHaveBeenCalled();
     expect(poolShutdown).not.toHaveBeenCalled();
     expect(cdpDisconnect).not.toHaveBeenCalled();
     expect(launcherClose).not.toHaveBeenCalled();

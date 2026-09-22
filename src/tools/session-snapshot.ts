@@ -29,8 +29,6 @@ export interface SnapshotTab {
   lastActivityAt?: number;
   /** Last observed activity for the owning worker/context. */
   workerLastActivityAt?: number;
-  /** Chrome profile directory when this tab belongs to a profile-scoped worker. */
-  profileDirectory?: string;
 }
 
 export interface SessionLifecycleMetadata {
@@ -39,7 +37,6 @@ export interface SessionLifecycleMetadata {
   profile: {
     type: string;
     userDataDir?: string;
-    profileDirectory?: string;
     cookieCopiedAt?: number;
   };
   storageState: {
@@ -166,9 +163,6 @@ export async function collectTabs(): Promise<SnapshotTab[]> {
             title,
             lastActivityAt: sessionInfo.lastActivityAt,
             workerLastActivityAt: workerInfo.lastActivityAt,
-            ...((workerInfo as { profileDirectory?: string }).profileDirectory && {
-              profileDirectory: (workerInfo as { profileDirectory?: string }).profileDirectory,
-            }),
           });
         }
       }
@@ -202,7 +196,6 @@ export function collectLifecycleMetadata(): SessionLifecycleMetadata {
     profile = {
       type: state.type,
       ...(state.userDataDir && { userDataDir: state.userDataDir }),
-      ...(state.profileDirectory && { profileDirectory: state.profileDirectory }),
       ...(state.cookieCopiedAt && { cookieCopiedAt: state.cookieCopiedAt }),
     };
   } catch {

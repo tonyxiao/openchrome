@@ -116,7 +116,6 @@ async function buttonCenter(page: Page, selector: string): Promise<{ x: number; 
     userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'openchrome-popup-live-'));
     browser = await puppeteer.launch({
       executablePath,
-      headless: false,
       userDataDir,
       args: [
         `--remote-debugging-port=${chromePort}`,

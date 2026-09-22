@@ -525,11 +525,11 @@ function buildCandidateRecoveryHints(
     hints.push("Refresh page state with read_page before retrying stale refs.");
   if (counts.auth_redirect > 0)
     hints.push(
-      "Verify authentication in a headed or persistent-profile session before retrying protected pages.",
+      "Verify authentication in the persistent-profile session before retrying protected pages.",
     );
   if (counts.captcha_or_waf > 0)
     hints.push(
-      "Stop repeated automation and use headed fallback or user-assisted verification for CAPTCHA/WAF blocks.",
+      "Stop repeated automation and use user-assisted verification for CAPTCHA/WAF blocks.",
     );
   if (counts.timeout > 0)
     hints.push(

@@ -292,23 +292,6 @@ describe('ChromeLauncher graceful restart', () => {
       expect(pgrepCalled).toBe(false);
     });
 
-    it('should skip restart when useTempProfile is true', async () => {
-      let pgrepCalled = false;
-      mockExecFileSync.mockImplementation((_cmd: unknown, args: unknown) => {
-        const argsArr = args as string[];
-        if (argsArr && argsArr.includes('Google Chrome')) pgrepCalled = true;
-        throw new Error('not found');
-      });
-
-      try {
-        await launcher.ensureChrome({ autoLaunch: true, useTempProfile: true });
-      } catch {
-        // Expected — Chrome binary not found in test env
-      }
-
-      expect(pgrepCalled).toBe(false);
-    });
-
     it('should attempt restart when restartChrome is true', async () => {
       jest.spyOn(launcher as any, 'getRealChromeProfileDir').mockReturnValue('/tmp/fake-chrome-profile');
       jest.spyOn(launcher as any, 'isProfileLocked').mockReturnValue(true);

@@ -15,7 +15,8 @@ const launcherPath = path.join(__dirname, '../../src/chrome/launcher.ts');
 let launcherSource: string;
 
 beforeAll(() => {
-  launcherSource = fs.readFileSync(launcherPath, 'utf8');
+  launcherSource = fs.readFileSync(launcherPath, 'utf8') +
+    fs.readFileSync(path.join(__dirname, '../../src/chrome/launcher-window-args.ts'), 'utf8');
 });
 
 describe('Chrome launch flag stealth optimization (#453)', () => {

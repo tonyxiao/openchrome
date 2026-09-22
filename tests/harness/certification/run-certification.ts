@@ -20,7 +20,7 @@ export function buildReport(thresholds: HarnessCertificationThresholds, now = ne
     startedAt: started.toISOString(),
     endedAt: ended.toISOString(),
     server: {
-      command: 'node dist/cli/index.js serve --http <port> --server-mode',
+      command: 'node dist/cli/index.js serve --http <port>',
       port: 0,
       mode: 'deterministic-local-fixture',
     },

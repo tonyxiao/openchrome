@@ -79,9 +79,6 @@
       "name": "lightweight_scroll"
     },
     {
-      "name": "list_profiles"
-    },
-    {
       "name": "memory"
     },
     {
@@ -100,6 +97,9 @@
       "name": "oc_assert"
     },
     {
+      "name": "oc_browser_control"
+    },
+    {
       "name": "oc_checkpoint"
     },
     {
@@ -110,9 +110,6 @@
     },
     {
       "name": "oc_context_import"
-    },
-    {
-      "name": "oc_copy_to_clipboard"
     },
     {
       "name": "oc_devtools_url"
@@ -133,9 +130,6 @@
       "name": "oc_gate_inspect"
     },
     {
-      "name": "oc_get_connection_info"
-    },
-    {
       "name": "oc_journal"
     },
     {
@@ -146,9 +140,6 @@
     },
     {
       "name": "oc_observe"
-    },
-    {
-      "name": "oc_open_host_settings"
     },
     {
       "name": "oc_output_fetch"

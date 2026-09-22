@@ -78,7 +78,7 @@ function prescriptiveDefaults(result: Omit<CheckResult, 'durationMs'>): Partial<
         docs: ['https://www.google.com/chrome/'],
         safe_alternatives: [
           'Install Google Chrome and rerun openchrome doctor.',
-          'Set CHROME_PATH to an existing Chrome or chrome-headless-shell binary.',
+          'Set CHROME_PATH to an existing Google Chrome or Chromium binary.',
         ],
       };
     case 'chrome-port':
