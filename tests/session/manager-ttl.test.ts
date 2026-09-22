@@ -144,7 +144,8 @@ describe('SessionManager TTL and Stats', () => {
       const defaultManager = new SessionManager(undefined, { autoCleanup: false });
       const config = defaultManager.getConfig();
 
-      expect(config.sessionTTL).toBe(30 * 60 * 1000); // 30 minutes
+      expect(config.sessionTTL).toBe(24 * 60 * 60 * 1000); // 24 hours
+      expect(config.targetLeaseTtl).toBe(24 * 60 * 60 * 1000); // 24 hours
       expect(config.cleanupInterval).toBe(60 * 1000); // 1 minute
       expect(config.maxSessions).toBe(100);
     });

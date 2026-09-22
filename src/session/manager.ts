@@ -48,12 +48,12 @@ const DEFAULT_SESSION_ID = 'default';
 const DEFAULT_CONTEXT_NAME = 'default';
 
 export interface SessionManagerConfig {
-  /** Session TTL in milliseconds (default: 30 minutes) */
+  /** Session TTL in milliseconds (default: 24 hours) */
   sessionTTL?: number;
   /** Auto-cleanup interval in milliseconds (default: 1 minute) */
   cleanupInterval?: number;
   /**
-   * Idle TTL for a managed target lease, in ms (default: 30 minutes; 0 disables).
+   * Idle TTL for a managed target lease, in ms (default: 24 hours; 0 disables).
    * Sliding — refreshed on every executeCDP call. A non-default-session lease that
    * goes silent past this window is treated as a disconnected/crashed owner and its
    * tab is reclaimed by auto-cleanup. The "default" session is exempt (mirrors the
@@ -121,9 +121,9 @@ export interface AbandonedWindowInfo {
 }
 
 const DEFAULT_CONFIG: Required<Omit<SessionManagerConfig, 'tenantManager' | 'strictTenantIsolation'>> = {
-  sessionTTL: 30 * 60 * 1000,      // 30 minutes
+  sessionTTL: 24 * 60 * 60 * 1000, // 24 hours
   cleanupInterval: 60 * 1000,       // 1 minute
-  targetLeaseTtl: 30 * 60 * 1000,   // 30 minutes (sliding idle TTL; 0 disables)
+  targetLeaseTtl: 24 * 60 * 60 * 1000, // 24 hours (sliding idle TTL; 0 disables)
   autoCleanup: true,
   maxSessions: 100,
   maxWorkersPerSession: 50,
@@ -431,7 +431,7 @@ export class SessionManager {
         const freeMemory = os.freemem();
         if (freeMemory < this.config.memoryPressureThreshold) {
           console.error(`[SessionManager] Memory pressure detected: ${Math.round(freeMemory / 1024 / 1024)}MB free (threshold: ${Math.round(this.config.memoryPressureThreshold / 1024 / 1024)}MB)`);
-          const aggressiveTTL = 5 * 60 * 1000; // 5-minute TTL instead of normal 30-minute
+          const aggressiveTTL = 5 * 60 * 1000; // 5-minute TTL instead of normal 24-hour
           const aggressiveDeleted = await this.cleanupInactiveSessions(aggressiveTTL, { force: true });
           if (aggressiveDeleted.length > 0) {
             console.error(`[SessionManager] Memory pressure cleanup: removed ${aggressiveDeleted.length} session(s) (5-min TTL)`);
